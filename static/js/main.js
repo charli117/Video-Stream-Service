@@ -128,6 +128,8 @@ async function updateStatus() {
 
         // 更新状态显示
         const statusDiv = document.getElementById('status');
+        const analysisToggle = document.getElementById('analysisToggle');
+
         if (status.error) {
             statusDiv.innerHTML = `
                 <p class="error">Error: ${status.error}</p>
@@ -135,26 +137,33 @@ async function updateStatus() {
             return;
         }
 
+        // 更新分析按钮状态
+        if (analysisToggle) {
+            analysisToggle.textContent = status.analysis_enabled ? 'Close Analysis' : 'Open Analysis';
+            updateButtonColor();
+        }
+
         statusDiv.innerHTML = `
-                    <p>Status: ${status.is_running ? 'Running' : 'Stopped'}</p>
-                    <p>Camera: ${status.current_camera !== null ? status.current_camera : 'None'}</p>
-                    <p>Resolution: ${status.camera_info.width || 0}x${status.camera_info.height || 0}</p>
-                    <p>FPS: ${status.fps || 0}</p>
-                `;
+            <p>Status: ${status.is_running ? 'Running' : 'Stopped'}</p>
+            <p>Camera: ${status.current_camera !== null ? status.current_camera : 'None'}</p>
+            <p>Resolution: ${status.camera_info.width || 0}x${status.camera_info.height || 0}</p>
+            <p>FPS: ${status.fps || 0}</p>
+            <p>Analysis: ${status.analysis_enabled ? 'Enabled' : 'Disabled'}</p>
+        `;
 
         // 如果摄像头未初始化，显示警告
         if (!status.camera_info.initialized) {
             statusDiv.innerHTML += `
-                        <p class="warning">Camera not initialized</p>
-                    `;
+                <p class="warning">Camera not initialized</p>
+            `;
         }
 
     } catch (error) {
         console.error('Error updating status:', error);
         const statusDiv = document.getElementById('status');
         statusDiv.innerHTML = `
-                    <p class="error">Error updating status: ${error.message}</p>
-                `;
+            <p class="error">Error updating status: ${error.message}</p>
+        `;
     }
 }
 

@@ -76,7 +76,8 @@ def get_status():
             'is_running': analyzer.is_running,
             'current_camera': analyzer.video_source,
             'fps': analyzer.fps,
-            'camera_info': {}
+            'camera_info': {},
+            'analysis_enabled': analyzer.analysis_enabled  # 添加分析状态
         }
 
         # 获取摄像头信息
