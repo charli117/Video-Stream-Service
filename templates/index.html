@@ -19,8 +19,8 @@
             padding: 15px;
             background-color: #f5f5f5;
             border-radius: 5px;
-            width: 80%;
-            max-width: 600px;
+            width: 85%;
+            max-width: 660px;
         }
         .camera-select {
             display: flex;
@@ -93,13 +93,10 @@
 
         <div class="controls">
             <div class="camera-select">
-                <select id="cameraSelect">
-                    <option value="">Loading cameras...</option>
-                </select>
+                <select id="cameraSelect"><option value="">Loading cameras...</option></select>
                 <button id="switchButton" onclick="switchCamera()" disabled>Switch Camera</button>
-                <button id="refreshButton" onclick="loadCameras()">
-                    <i class="fas fa-sync"></i> Refresh List
-                </button>
+                <button id="refreshButton" onclick="loadCameras()"><i class="fas fa-sync"></i> Refresh List</button>
+                <button id="analysisToggle" onclick="toggleAnalysis()">Open Analysis</button>
             </div>
             <div id="error" class="error" style="display: none;"></div>
         </div>
@@ -281,6 +278,24 @@
             // 然后每秒更新一次
             setInterval(updateStatus, 1000);
         }
+
+        function toggleAnalysis() {
+            const enabled = document.getElementById('analysisToggle').innerText === '开启分析';
+            fetch('/toggle_analysis', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({enabled: enabled}),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('analysisToggle').innerText = enabled ? '关闭分析' : '开启分析';
+                }
+            });
+        }
+
 
         // 页面加载完成后启动状态更新
         document.addEventListener('DOMContentLoaded', () => {

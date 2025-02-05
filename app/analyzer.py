@@ -29,6 +29,7 @@ class VideoAnalyzer:
         self.fps = 0
         self.camera = Camera()
         self.video_source = None
+        self.analysis_enabled = False
         self._lock = threading.Lock()
         self._setup_logging()
         self._threads = []
@@ -333,7 +334,7 @@ class VideoAnalyzer:
         change_frames = []
         while self.is_running:
             try:
-                if not self.frame_queue.empty():
+                if not self.frame_queue.empty() and self.analysis_enabled:
                     frame = self.frame_queue.get()
 
                     # 预处理
