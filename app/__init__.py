@@ -1,15 +1,15 @@
 import os
 import logging
-
 from flask import Flask
 from config import InitialConfig
-from app.analyzer import VideoAnalyzer
+from app.analyzer import VideoAnalyzer, AudioAnalyzer
 
 # 配置日志
 logging.basicConfig(level=InitialConfig.LOG_LEVEL, format=InitialConfig.LOG_FORMAT)
 
-# 创建全局analyzer实例
-analyzer = VideoAnalyzer()
+# 创建全局分析器实例
+video_analyzer = VideoAnalyzer()
+audio_analyzer = AudioAnalyzer()
 
 
 def create_app():
@@ -19,13 +19,13 @@ def create_app():
 
     # 注册蓝图
     from app.routes import main_bp
-
     app.register_blueprint(main_bp)
 
-    # 只在启动时初始化默认摄像头
+    # 初始化分析器
     try:
-        analyzer.start(InitialConfig.DEFAULT_CAMERA_INDEX)  # 默认使用0号摄像头
+        video_analyzer.start(InitialConfig.DEFAULT_CAMERA_INDEX)
+        audio_analyzer.start()
     except Exception as e:
-        app.logger.error(f"Failed to initialize default camera: {str(e)}")
+        app.logger.error(f"Failed to initialize analyzers: {str(e)}")
 
     return app

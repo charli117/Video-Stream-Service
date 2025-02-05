@@ -1,8 +1,9 @@
 import logging
 import os
 from flask import Blueprint, render_template, Response, jsonify, request
-from app import analyzer
+from app import video_analyzer, audio_analyzer
 from app.camera import Camera
+from app.analyzer import AudioAnalyzer
 
 # 创建蓝图
 main_bp = Blueprint('main', __name__)
@@ -19,7 +20,7 @@ def index():
 def video_feed():
     """视频流"""
     try:
-        return Response(analyzer.generate_frames(),
+        return Response(video_analyzer.generate_frames(),
                         mimetype='multipart/x-mixed-replace; boundary=frame')
     except Exception as e:
         logger.error(f"Error in video feed: {str(e)}")
@@ -31,11 +32,8 @@ def list_cameras():
     """获取可用摄像头列表"""
     try:
         cameras = Camera.list_cameras()
+        current_camera = video_analyzer.video_source
 
-        # 添加当前使用的摄像头信息
-        current_camera = analyzer.video_source
-
-        # 确保返回正确的数据结构
         return jsonify({
             'cameras': cameras,
             'current': current_camera
@@ -56,14 +54,13 @@ def switch_camera():
         data = request.get_json()
         camera_index = int(data.get('camera_index', 0))
 
-        # 先检查摄像头是否可用
         if not Camera._is_valid_camera(camera_index):
             return jsonify({
                 'success': False,
                 'error': f'Camera {camera_index} is not available'
             }), 400
 
-        success = analyzer.switch_camera(camera_index)
+        success = video_analyzer.switch_camera(camera_index)
         return jsonify({'success': success})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
@@ -71,37 +68,36 @@ def switch_camera():
 
 @main_bp.route('/api/status')
 def get_status():
-    """获取当前状态"""
     try:
         status = {
-            'is_running': analyzer.is_running,
-            'current_camera': analyzer.video_source,
-            'fps': analyzer.fps,
+            'is_running': video_analyzer.is_running,
+            'current_camera': video_analyzer.video_source,
+            'fps': video_analyzer.fps,
             'camera_info': {},
-            'analysis_enabled': analyzer.analysis_enabled,
-            'frame_changed': not analyzer.change_queue.empty(),
-            'frame_changes': []  # 添加帧变化记录列表
+            'analysis_enabled': video_analyzer.analysis_enabled,
+            'frame_changed': not video_analyzer.change_queue.empty(),
+            'frame_changes': [],
+            'audio_enabled': audio_analyzer.is_running,
+            'audio_changes': []
         }
-        
-        # 获取摄像头信息
-        if analyzer.camera and analyzer.camera.is_initialized:
+
+        if video_analyzer.camera and video_analyzer.camera.is_initialized:
             status['camera_info'] = {
-                'width': analyzer.camera.width,
-                'height': analyzer.camera.height,
-                'fps': analyzer.camera.fps,
+                'width': video_analyzer.camera.width,
+                'height': video_analyzer.camera.height,
+                'fps': video_analyzer.camera.fps,
                 'initialized': True
             }
 
-        # 获取帧变化记录
         if status['analysis_enabled']:
             try:
-                output_dir = analyzer.output_dir
+                output_dir = video_analyzer.output_dir
                 image_files = sorted(
                     [f for f in os.listdir(output_dir) if f.endswith('.jpg')],
                     key=lambda x: os.path.getmtime(os.path.join(output_dir, x)),
                     reverse=True
-                )[:10]  # 最近10张图片
-                
+                )[:10]
+
                 for img_file in image_files:
                     file_path = os.path.join(output_dir, img_file)
                     timestamp = os.path.getmtime(file_path)
@@ -112,7 +108,28 @@ def get_status():
             except Exception as e:
                 logger.error(f"Error getting frame changes: {str(e)}")
 
+        # 添加音频变化记录
+        if audio_analyzer.is_running:
+            try:
+                output_dir = audio_analyzer.output_dir
+                audio_files = sorted(
+                    [f for f in os.listdir(output_dir) if f.endswith('.wav')],
+                    key=lambda x: os.path.getmtime(os.path.join(output_dir, x)),
+                    reverse=True
+                )[:10]
+
+                for audio_file in audio_files:
+                    file_path = os.path.join(output_dir, audio_file)
+                    timestamp = os.path.getmtime(file_path)
+                    status['audio_changes'].append({
+                        'time': timestamp,
+                        'audio_url': f'/static/output/{audio_file}'
+                    })
+            except Exception as e:
+                logger.error(f"Error getting audio changes: {str(e)}")
+
         return jsonify(status)
+
     except Exception as e:
         logger.error(f"Error getting status: {str(e)}")
         return jsonify({
@@ -128,8 +145,30 @@ def get_status():
 def toggle_analysis():
     data = request.get_json()
     enabled = data.get('enabled', False)
-    success = analyzer.toggle_analysis(enabled)
-    return jsonify({'success': success, 'analysis_enabled': analyzer.analysis_enabled})
+    success = video_analyzer.toggle_analysis(enabled)
+    return jsonify({'success': success, 'analysis_enabled': video_analyzer.analysis_enabled})
+
+
+@main_bp.route('/api/toggle_audio', methods=['POST'])
+def toggle_audio():
+    try:
+        data = request.get_json()
+        enabled = data.get('enabled', False)
+
+        if enabled:
+            audio_analyzer.start()
+        else:
+            audio_analyzer.stop()
+
+        return jsonify({
+            'success': True,
+            'audio_enabled': enabled
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 
 @main_bp.route('/api/camera_names', methods=['POST'])

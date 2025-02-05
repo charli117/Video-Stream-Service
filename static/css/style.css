@@ -227,15 +227,14 @@ button i {
         opacity: 1;
     }
 }
-.frame-changes-log {
+.changes-log {
     margin-top: 20px;
     padding: 15px;
-    background-color: #f8f9fa;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    background: #f8f9fa;
+    border-radius: 5px;
 }
 
-.frame-changes-log h3 {
+.changes-log h3 {
     margin: 0 0 15px 0;
     color: #495057;
     font-size: 16px;
