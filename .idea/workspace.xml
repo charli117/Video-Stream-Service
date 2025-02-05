@@ -4,11 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="c7800c4b-088e-4c62-8313-176bf30b8a3d" name="更改" comment="feat: 添加分析开关接口及前端控制">
-      <change afterPath="$PROJECT_DIR$/.idea/stylesheetLinters/stylelint.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/static/css/style.css" beforeDir="false" afterPath="$PROJECT_DIR$/static/css/style.css" afterDir="false" />
-    </list>
+    <list default="true" id="c7800c4b-088e-4c62-8313-176bf30b8a3d" name="更改" comment="feat: 添加分析开关接口及前端控制，调整样式宽度" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -104,7 +100,7 @@
       <updated>1738672999248</updated>
       <workItem from="1738673000504" duration="115000" />
       <workItem from="1738673138234" duration="13668000" />
-      <workItem from="1738716159262" duration="7142000" />
+      <workItem from="1738716159262" duration="7448000" />
     </task>
     <task id="LOCAL-00001" summary="feat: 初始化项目结构并添加视频分析功能">
       <option name="closed" value="true" />
@@ -162,11 +158,30 @@
       <option name="project" value="LOCAL" />
       <updated>1738733614456</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="feat: 添加分析开关接口及前端控制，调整样式宽度">
+      <option name="closed" value="true" />
+      <created>1738734930109</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1738734930109</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="feat: 初始化项目结构并添加视频分析功能" />
@@ -175,7 +190,8 @@
     <MESSAGE value="refactor: 移除冗余的config导入" />
     <MESSAGE value="refactor: 重构配置类并优化摄像头初始化" />
     <MESSAGE value="feat: 添加分析开关接口及前端控制" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat: 添加分析开关接口及前端控制" />
+    <MESSAGE value="feat: 添加分析开关接口及前端控制，调整样式宽度" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: 添加分析开关接口及前端控制，调整样式宽度" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
