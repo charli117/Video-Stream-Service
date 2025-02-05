@@ -220,20 +220,16 @@ class VideoAnalyzer:
 
         # 文件处理器(带轮转)
         file_handler = RotatingFileHandler(
-            './logs/video_analyzer.log',
+            InitialConfig.LOG_PATH,
             maxBytes=1024 * 1024,  # 1MB
             backupCount=5
         )
-        file_handler.setFormatter(logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        ))
+        file_handler.setFormatter(logging.Formatter(InitialConfig.LOG_FORMAT))
         self.logger.addHandler(file_handler)
 
         # 控制台处理器
         console_handler = logging.StreamHandler()
-        console_handler.setFormatter(logging.Formatter(
-            '%(asctime)s - %(levelname)s - %(message)s'
-        ))
+        console_handler.setFormatter(logging.Formatter(InitialConfig.LOG_FORMAT))
         self.logger.addHandler(console_handler)
 
     def _preprocess_frame(self, frame):
