@@ -421,7 +421,8 @@ class VideoAnalyzer(BaseAnalyzer):
             try:
                 if not self.frame_queue.empty() and self.analysis_enabled:
                     frame = self.frame_queue.get()
-                    processed_frame = self._preprocess_frame(frame)
+                    # processed_frame = self._preprocess_frame(frame)
+                    processed_frame = frame
 
                     if processed_frame is not None and len(processed_frame.shape) == 3:
                         if self.last_frame is not None:
@@ -448,22 +449,30 @@ class VideoAnalyzer(BaseAnalyzer):
             time.sleep(0.01)
 
     def _preprocess_frame(self, frame):
-        """预处理视频帧"""
+        """预处理视频帧，增强细节但保持自然效果"""
         try:
-            denoised = cv2.GaussianBlur(frame, (5, 5), 0)
-
+            # 轻微的高斯模糊去噪，kernel size减小为(3,3)以保留更多细节
+            denoised = cv2.GaussianBlur(frame, (3, 3), 0)
+            
+            # 转换到LAB色彩空间
             lab = cv2.cvtColor(denoised, cv2.COLOR_BGR2LAB)
             l, a, b = cv2.split(lab)
-            clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+            
+            # 使用更温和的CLAHE参数
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
             cl = clahe.apply(l)
+            
+            # 合并通道
             enhanced = cv2.merge((cl, a, b))
             enhanced = cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
-
-            alpha = 1.2
-            beta = 10
+            
+            # 轻微调整亮度和对比度
+            alpha = 1.1  # 降低对比度增强
+            beta = 5    # 降低亮度提升
             adjusted = cv2.convertScaleAbs(enhanced, alpha=alpha, beta=beta)
-
+            
             return adjusted
+            
         except Exception as e:
             self.logger.error(f"Frame preprocessing failed: {str(e)}")
             return frame
