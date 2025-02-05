@@ -167,7 +167,7 @@ function toggleAnalysis() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            analysisToggle.textContent = isEnabled ? 'Close Analysis' : 'Open Analysis';
+            analysisToggle.textContent = data.analysis_enabled ? 'Close Analysis' : 'Open Analysis';
         } else {
             showError('Failed to toggle analysis');
         }

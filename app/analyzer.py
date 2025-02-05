@@ -289,7 +289,13 @@ class VideoAnalyzer:
         with self._status_lock:
             self.analysis_enabled = enabled
             self.logger.info(f"Analysis {'enabled' if enabled else 'disabled'}")
+            self.update_analysis_status()
             return True
+
+    def update_analysis_status(self):
+        """更新分析状态"""
+        with self._status_lock:
+            self.logger.info(f"Analysis status updated: {'enabled' if self.analysis_enabled else 'disabled'}")
 
     def _analyze_loop(self):
         """分析视频帧的循环"""
