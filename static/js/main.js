@@ -1,4 +1,50 @@
 let currentCamera = null;
+let frameChangesHistory = [];  // 存储历史记录
+
+// 添加图片查看相关函数
+function showImageViewer(imageUrl) {
+    const viewer = document.createElement('div');
+    viewer.className = 'image-viewer';
+    viewer.innerHTML = `
+        <div class="viewer-content">
+            <div class="viewer-header">
+                <button class="zoom-in"><i class="fas fa-search-plus"></i></button>
+                <button class="zoom-out"><i class="fas fa-search-minus"></i></button>
+                <button class="close-viewer"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="viewer-body">
+                <img src="${imageUrl}" alt="Frame Change">
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(viewer);
+
+    // 绑定事件
+    const img = viewer.querySelector('img');
+    let scale = 1;
+
+    viewer.querySelector('.zoom-in').onclick = () => {
+        scale *= 1.2;
+        img.style.transform = `scale(${scale})`;
+    };
+
+    viewer.querySelector('.zoom-out').onclick = () => {
+        scale /= 1.2;
+        img.style.transform = `scale(${scale})`;
+    };
+
+    viewer.querySelector('.close-viewer').onclick = () => {
+        viewer.remove();
+    };
+
+    // 点击背景关闭
+    viewer.onclick = (e) => {
+        if (e.target === viewer) {
+            viewer.remove();
+        }
+    };
+}
 
 async function loadCameras() {
     try {
@@ -126,6 +172,18 @@ async function updateStatus() {
         }
         const status = await response.json();
 
+        // 更新历史记录
+        if (status.frame_changes && status.frame_changes.length > 0) {
+            status.frame_changes.forEach(change => {
+                const existingChange = frameChangesHistory.find(h => h.time === change.time);
+                if (!existingChange) {
+                    frameChangesHistory.unshift(change);
+                }
+            });
+            // 限制历史记录数量
+            frameChangesHistory = frameChangesHistory.slice(0, 50);
+        }
+
         // 更新状态显示
         const statusDiv = document.getElementById('status');
         const analysisToggle = document.getElementById('analysisToggle');
@@ -143,13 +201,46 @@ async function updateStatus() {
             updateButtonColor();
         }
 
-        statusDiv.innerHTML = `
+        let statusHtml = `
             <p>Status: ${status.is_running ? 'Running' : 'Stopped'}</p>
             <p>Camera: ${status.current_camera !== null ? status.current_camera : 'None'}</p>
             <p>Resolution: ${status.camera_info.width || 0}x${status.camera_info.height || 0}</p>
             <p>FPS: ${status.fps || 0}</p>
             <p>Analysis: ${status.analysis_enabled ? 'Enabled' : 'Disabled'}</p>
         `;
+
+        // 始终显示帧变化日志，移除 if (status.analysis_enabled) 判断
+        statusHtml += `
+            <div class="frame-changes-log">
+                <h3>Frame Changes Log</h3>
+                <div class="log-entries">
+        `;
+        
+        if (frameChangesHistory.length > 0) {
+            frameChangesHistory.forEach(change => {
+                const date = new Date(change.time * 1000);
+                const timeString = date.toLocaleString('zh-CN');
+                statusHtml += `
+                    <div class="log-entry">
+                        <a href="javascript:void(0)" onclick="showImageViewer('${change.image_url}')" class="change-time">
+                            <i class="fas fa-camera"></i>
+                            ${timeString}
+                        </a>
+                    </div>
+                `;
+            });
+        } else {
+            statusHtml += `
+                <p class="no-changes">No frame changes detected</p>
+            `;
+        }
+
+        statusHtml += `
+                </div>
+            </div>
+        `;
+
+        statusDiv.innerHTML = statusHtml;
 
         // 如果摄像头未初始化，显示警告
         if (!status.camera_info.initialized) {
@@ -171,8 +262,8 @@ async function updateStatus() {
 function startStatusUpdates() {
     // 立即更新一次
     updateStatus();
-    // 然后每秒更新一次
-    setInterval(updateStatus, 1000);
+    // 更频繁地更新状态（每200ms一次）以便及时显示帧变化
+    setInterval(updateStatus, 200);
 }
 
 // 页面加载完成后启动状态更新
@@ -180,6 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadCameras();
     startStatusUpdates();
     restoreButtonState();  // 添加这一行
+    updateButtonColor();
 });
 
 function toggleAnalysis() {
@@ -196,7 +288,6 @@ function toggleAnalysis() {
     })
     .then(response => response.json())
     .then(data => {
-        console.log('--', data)
         if (data.success) {
             // 根据服务器返回的状态更新按钮文本
             analysisToggle.textContent = data.analysis_enabled ? 'Close Analysis' : 'Open Analysis';

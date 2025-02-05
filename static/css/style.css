@@ -196,3 +196,146 @@ button i {
         width: 100%;
     }
 }
+.frame-change {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border-radius: 4px;
+    background-color: #f8f9fa;
+    transition: all 0.3s ease;
+}
+
+.frame-change.active {
+    background-color: #fff3cd;
+    color: #856404;
+    animation: pulse 1s infinite;
+}
+
+.frame-change i {
+    color: inherit;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+.frame-changes-log {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.frame-changes-log h3 {
+    margin: 0 0 15px 0;
+    color: #495057;
+    font-size: 16px;
+}
+
+.log-entries {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.log-entry {
+    padding: 8px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.log-entry:last-child {
+    border-bottom: none;
+}
+
+.change-time {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #0056b3;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.change-time:hover {
+    color: #003d82;
+    text-decoration: underline;
+}
+
+.change-time i {
+    color: inherit;
+}
+
+.no-changes {
+    color: #6c757d;
+    font-style: italic;
+    text-align: center;
+    padding: 10px;
+}
+.image-viewer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.viewer-content {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    max-width: 90%;
+    max-height: 90%;
+    position: relative;
+}
+
+.viewer-header {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 10px;
+    z-index: 1;
+}
+
+.viewer-header button {
+    background: rgba(255, 255, 255, 0.8);
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #333;
+}
+
+.viewer-header button:hover {
+    background: white;
+}
+
+.viewer-body {
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.viewer-body img {
+    max-width: 100%;
+    max-height: calc(90vh - 40px);
+    transition: transform 0.3s ease;
+}

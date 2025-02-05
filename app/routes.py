@@ -1,4 +1,5 @@
 import logging
+import os
 from flask import Blueprint, render_template, Response, jsonify, request
 from app import analyzer
 from app.camera import Camera
@@ -77,9 +78,11 @@ def get_status():
             'current_camera': analyzer.video_source,
             'fps': analyzer.fps,
             'camera_info': {},
-            'analysis_enabled': analyzer.analysis_enabled  # 添加分析状态
+            'analysis_enabled': analyzer.analysis_enabled,
+            'frame_changed': not analyzer.change_queue.empty(),
+            'frame_changes': []  # 添加帧变化记录列表
         }
-
+        
         # 获取摄像头信息
         if analyzer.camera and analyzer.camera.is_initialized:
             status['camera_info'] = {
@@ -88,6 +91,26 @@ def get_status():
                 'fps': analyzer.camera.fps,
                 'initialized': True
             }
+
+        # 获取帧变化记录
+        if status['analysis_enabled']:
+            try:
+                output_dir = analyzer.output_dir
+                image_files = sorted(
+                    [f for f in os.listdir(output_dir) if f.endswith('.jpg')],
+                    key=lambda x: os.path.getmtime(os.path.join(output_dir, x)),
+                    reverse=True
+                )[:10]  # 最近10张图片
+                
+                for img_file in image_files:
+                    file_path = os.path.join(output_dir, img_file)
+                    timestamp = os.path.getmtime(file_path)
+                    status['frame_changes'].append({
+                        'time': timestamp,
+                        'image_url': f'/static/output/{img_file}'
+                    })
+            except Exception as e:
+                logger.error(f"Error getting frame changes: {str(e)}")
 
         return jsonify(status)
     except Exception as e:

@@ -97,13 +97,35 @@ class VideoAnalyzer:
     def get_status(self):
         """获取当前状态（线程安全）"""
         with self._status_lock:
-            return {
+            status = {
                 'is_running': self.is_running,
                 'current_camera': self.video_source,
                 'fps': self.fps,
                 'camera_info': self.camera.get_info() if self.camera else {},
-                'analysis_enabled': self.analysis_enabled  # 添加分析状态
+                'analysis_enabled': self.analysis_enabled,
+                'frame_changes': []  # 添加帧变化记录列表
             }
+            
+            # 获取最近的帧变化记录
+            if self.analysis_enabled:
+                try:
+                    # 获取最近保存的图片信息
+                    image_files = sorted(
+                        [f for f in os.listdir(self.output_dir) if f.endswith('.jpg')],
+                        key=lambda x: os.path.getmtime(os.path.join(self.output_dir, x)),
+                        reverse=True
+                    )[:10]  # 最近10张图片
+                    
+                    for img_file in image_files:
+                        timestamp = os.path.getmtime(os.path.join(self.output_dir, img_file))
+                        status['frame_changes'].append({
+                            'time': timestamp,
+                            'image_url': f'/static/output/{img_file}'
+                        })
+                except Exception as e:
+                    self.logger.error(f"Error getting frame changes: {str(e)}")
+                    
+            return status
 
     def switch_camera(self, camera_index):
         """切换摄像头"""

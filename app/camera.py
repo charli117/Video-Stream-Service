@@ -5,6 +5,8 @@ from config import InitialConfig
 
 
 class Camera:
+    _device_names = {}  # 类变量，用于存储设备名称映射
+
     def __init__(self):
         self.cap = None
         self.logger = logging.getLogger('Camera')
@@ -26,8 +28,6 @@ class Camera:
             return ret and frame is not None
         except:
             return False
-
-    _device_names = {}  # 类变量，用于存储设备名称映射
 
     @classmethod
     def update_device_names(cls, device_names):

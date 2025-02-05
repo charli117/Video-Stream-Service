@@ -6,10 +6,7 @@ from config import InitialConfig
 from app.analyzer import VideoAnalyzer
 
 # 配置日志
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=InitialConfig.LOG_LEVEL, format=InitialConfig.LOG_FORMAT)
 
 # 创建全局analyzer实例
 analyzer = VideoAnalyzer()
