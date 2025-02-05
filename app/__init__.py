@@ -1,6 +1,5 @@
 import os
 import logging
-import config
 
 from flask import Flask
 from config import InitialConfig
