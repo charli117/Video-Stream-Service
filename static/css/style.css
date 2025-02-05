@@ -56,7 +56,7 @@ body {
 
 .select-wrapper {
     flex: 1;
-    min-width: 250px;
+    min-width: 50px;
 }
 
 .button-group {
@@ -337,4 +337,38 @@ button i {
     max-width: 100%;
     max-height: calc(90vh - 40px);
     transition: transform 0.3s ease;
+}
+.device-select-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.select-group {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    flex: 2;
+}
+
+/* 合并所有的媒体查询 */
+@media (max-width: 1024px) {
+    .device-select-container {
+        flex-direction: column;
+    }
+    
+    .select-group {
+        width: 100%;
+        flex-direction: column;
+    }
+    
+    .button-group {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .select-wrapper {
+        width: 100%;
+    }
 }

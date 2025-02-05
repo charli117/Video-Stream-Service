@@ -12,14 +12,18 @@
         </header>
 
         <div class="controls">
-            <div class="camera-select">
-                <div class="select-wrapper">
-                    <select id="cameraSelect"><option value="">Loading cameras...</option></select>
-                    <select id="audioSelect"><option value="">Loading audio devices...</option></select>
+            <div class="device-select-container">
+                <div class="select-group">
+                    <div class="select-wrapper">
+                        <select id="cameraSelect"><option value="">Loading cameras...</option></select>
+                    </div>
+                    <div class="select-wrapper">
+                        <select id="audioSelect"><option value="">Loading microphone...</option></select>
+                    </div>
                 </div>
                 <div class="button-group">
                     <button id="switchButton" onclick="switchDevices()" disabled>
-                        <i class="fas fa-exchange-alt"></i> Switch
+                        <i class="fas fa-exchange-alt"></i> Switch Devices
                     </button>
                     <button id="refreshButton" onclick="loadDevices()">
                         <i class="fas fa-sync"></i> Refresh List

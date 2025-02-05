@@ -185,7 +185,7 @@ class BaseAnalyzer:
         """启动分析线程"""
         self._threads = [
             Thread(target=self._analyze_loop),
-            Thread(target=self._llm_analyze)
+            Thread(target=self._llm_loop)  # 改用 _llm_loop 而不是 _llm_analyze
         ]
         for thread in self._threads:
             thread.daemon = True
