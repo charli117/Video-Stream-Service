@@ -159,7 +159,7 @@ function toggleAnalysis() {
     // 修改判断逻辑，根据当前按钮文本来确定要切换的状态
     const isEnabled = analysisToggle.textContent === 'Open Analysis';
 
-    fetch('/toggle_analysis', {
+    fetch('/api/toggle_analysis', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -168,6 +168,7 @@ function toggleAnalysis() {
     })
     .then(response => response.json())
     .then(data => {
+        console.log('--', data)
         if (data.success) {
             // 根据服务器返回的状态更新按钮文本
             analysisToggle.textContent = data.analysis_enabled ? 'Close Analysis' : 'Open Analysis';

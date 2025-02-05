@@ -100,7 +100,7 @@ def get_status():
         }), 500
 
 
-@main_bp.route('/toggle_analysis', methods=['POST'])
+@main_bp.route('/api/toggle_analysis', methods=['POST'])
 def toggle_analysis():
     data = request.get_json()
     enabled = data.get('enabled', False)
