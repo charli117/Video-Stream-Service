@@ -105,4 +105,4 @@ def toggle_analysis():
     data = request.get_json()
     enabled = data.get('enabled', False)
     success = analyzer.toggle_analysis(enabled)
-    return jsonify({'success': success})
+    return jsonify({'success': success, 'analysis_enabled': analyzer.analysis_enabled})
