@@ -5,10 +5,29 @@ async function loadCameras() {
         const refreshButton = document.getElementById('refreshButton');
         const switchButton = document.getElementById('switchButton');
 
-        // 禁用按钮，显示加载状态
         refreshButton.disabled = true;
         switchButton.disabled = true;
 
+        // 获取设备名称
+        if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            const deviceNames = {};
+            videoDevices.forEach((device, index) => {
+                deviceNames[index] = device.label || `Camera ${index}`;
+            });
+
+            // 发送设备名称到服务器
+            await fetch('/api/camera_names', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ deviceNames })
+            });
+        }
+
+        // 获取摄像头列表
         const response = await fetch("/api/cameras");
         const data = await response.json();
 
@@ -28,7 +47,7 @@ async function loadCameras() {
         data.cameras.forEach(camera => {
             const option = document.createElement('option');
             option.value = camera.index;
-            option.text = `Camera ${camera.index} (${camera.width}x${camera.height} @ ${camera.fps}fps)`;
+            option.text = `${camera.name} (${camera.width}x${camera.height} @ ${camera.fps}fps)`;
             if (camera.index === currentCamera) {
                 option.selected = true;
             }

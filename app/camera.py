@@ -27,38 +27,32 @@ class Camera:
         except:
             return False
 
+    _device_names = {}  # 类变量，用于存储设备名称映射
+
+    @classmethod
+    def update_device_names(cls, device_names):
+        """更新设备名称映射"""
+        cls._device_names = device_names
+
     @staticmethod
     def list_cameras():
         """列出所有可用摄像头"""
         available_cameras = []
         logger = logging.getLogger('Camera')
 
-        # 首先检查默认摄像头（通常是0）
-        if Camera._is_valid_camera(0):
-            cap = cv2.VideoCapture(0)
-            info = {
-                'index': 0,
-                'width': int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-                'height': int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-                'fps': int(cap.get(cv2.CAP_PROP_FPS))
-            }
-            cap.release()
-            available_cameras.append(info)
-            logger.info(f"Found default camera: {info}")
-
-        # 然后检查其他常用索引（1-3）
-        for i in range(1, 4):
+        for i in range(4):
             if Camera._is_valid_camera(i):
                 cap = cv2.VideoCapture(i)
                 info = {
                     'index': i,
+                    'name': Camera._device_names.get(str(i), f'Camera {i}'),
                     'width': int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
                     'height': int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
                     'fps': int(cap.get(cv2.CAP_PROP_FPS))
                 }
                 cap.release()
                 available_cameras.append(info)
-                logger.info(f"Found camera {i}: {info}")
+                logger.info(f"Found camera: {info}")
 
         return available_cameras
 

@@ -106,3 +106,16 @@ def toggle_analysis():
     enabled = data.get('enabled', False)
     success = analyzer.toggle_analysis(enabled)
     return jsonify({'success': success, 'analysis_enabled': analyzer.analysis_enabled})
+
+
+@main_bp.route('/api/camera_names', methods=['POST'])
+def update_camera_names():
+    """更新摄像头名称"""
+    try:
+        data = request.get_json()
+        device_names = data.get('deviceNames', {})
+        # 更新全局摄像头名称映射
+        Camera.update_device_names(device_names)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
