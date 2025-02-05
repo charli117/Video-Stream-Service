@@ -102,7 +102,7 @@ def get_status():
 
 @main_bp.route('/toggle_analysis', methods=['POST'])
 def toggle_analysis():
-    global analysis_enabled
     data = request.get_json()
-    analysis_enabled = data['enabled']
-    return jsonify({'success': True})
+    enabled = data.get('enabled', False)
+    success = analyzer.toggle_analysis(enabled)
+    return jsonify({'success': success})

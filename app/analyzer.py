@@ -101,7 +101,8 @@ class VideoAnalyzer:
                 'is_running': self.is_running,
                 'current_camera': self.video_source,
                 'fps': self.fps,
-                'camera_info': self.camera.get_info() if self.camera else {}
+                'camera_info': self.camera.get_info() if self.camera else {},
+                'analysis_enabled': self.analysis_enabled  # 添加分析状态
             }
 
     def switch_camera(self, camera_index):
@@ -282,6 +283,13 @@ class VideoAnalyzer:
     #         except Exception as e:
     #             self.logger.error(f"Error in capture loop: {str(e)}")
     #             time.sleep(0.01)
+
+    def toggle_analysis(self, enabled):
+        """切换分析状态"""
+        with self._status_lock:
+            self.analysis_enabled = enabled
+            self.logger.info(f"Analysis {'enabled' if enabled else 'disabled'}")
+            return True
 
     def _analyze_loop(self):
         """分析视频帧的循环"""

@@ -279,21 +279,25 @@
             setInterval(updateStatus, 1000);
         }
 
-        function toggleAnalysis() {
-            const enabled = document.getElementById('analysisToggle').innerText === '开启分析';
+        function toggleAnalysis(enabled) {
             fetch('/toggle_analysis', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({enabled: enabled}),
+                body: JSON.stringify({
+                    enabled: enabled
+                })
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    document.getElementById('analysisToggle').innerText = enabled ? '关闭分析' : '开启分析';
-                }
-            });
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            console.log('Analysis state changed successfully');
+                        } else {
+                            console.error('Failed to change analysis state');
+                        }
+                    })
+                    .catch(error => console.error('Error:', error));
         }
 
 
