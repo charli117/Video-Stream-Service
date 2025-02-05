@@ -1,8 +1,8 @@
+import logging
 from flask import Blueprint, render_template, Response, jsonify, request
 from app import analyzer
 from app.camera import Camera
-import logging
-import config
+from config import InitialConfig
 
 # 创建蓝图
 main_bp = Blueprint('main', __name__)

@@ -1,18 +1,18 @@
 import cv2
 import time
 import logging
-import config
+from config import InitialConfig
 
 
 class Camera:
     def __init__(self):
         self.cap = None
         self.logger = logging.getLogger('Camera')
-        self.width = None  # 移除固定分辨率
+        self.width = None
         self.height = None
-        self.fps = 30
+        self.fps = InitialConfig.DEFAULT_FPS
         self.is_initialized = False
-        self._buffer_size = config.MAX_QUEUE_SIZE
+        self._buffer_size = InitialConfig.MAX_QUEUE_SIZE
 
     @staticmethod
     def _is_valid_camera(index):

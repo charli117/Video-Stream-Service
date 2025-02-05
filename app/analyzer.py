@@ -5,13 +5,13 @@ import json
 import logging
 import threading
 import base64
-import config
 
 from datetime import datetime
 from threading import Thread
 from queue import Queue
 from collections import deque
 from app.camera import Camera
+from config import InitialConfig
 from logging.handlers import RotatingFileHandler
 from flask import Flask, render_template, Response
 from skimage.metrics import structural_similarity as ssim
@@ -34,11 +34,11 @@ class VideoAnalyzer:
         self._threads = []
         self._frame_times = deque(maxlen=30)
         self._last_frame_time = time.time()
-        self.max_saved_images = config.MAX_SAVED_IMAGES
+        self.max_saved_images = InitialConfig.MAX_SAVED_IMAGES
         self._status_lock = threading.Lock()  # 添加状态锁
-        self.max_display_height = config.MAX_DISPLAY_HEIGHT  # 最大显示高度，用于等比缩放
-        self.scale_percent = config.SCALE_PERCENT  # JPEG压缩质量
-        self.output_dir = config.OUTPUT_DIR
+        self.max_display_height = InitialConfig.MAX_DISPLAY_HEIGHT  # 最大显示高度，用于等比缩放
+        self.scale_percent = InitialConfig.SCALE_PERCENT  # JPEG压缩质量
+        self.output_dir = InitialConfig.OUTPUT_DIR
 
     # def update_fps(self):
     #     """更新FPS计算"""
@@ -186,7 +186,7 @@ class VideoAnalyzer:
             logger.error(f"Error saving image: {str(e)}")
             return None
 
-    def cleanup_old_images(self, max_files=config.MAX_SAVED_IMAGES):
+    def cleanup_old_images(self, max_files=InitialConfig.MAX_SAVED_IMAGES):
         """清理旧图像文件"""
         try:
             # 获取目录中的所有图像文件
