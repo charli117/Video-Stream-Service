@@ -61,10 +61,29 @@ async function loadDevices() {
             const videoDevices = devices.filter(device => device.kind === 'videoinput');
             const audioDevices = devices.filter(device => device.kind === 'audioinput');
             
-            const deviceNames = {
-                video: {},
-                audio: {}
-            };
+            const deviceNames = {};
+            const audioDeviceNames = {};
+
+            videoDevices.forEach((device, index) => {
+                deviceNames[index] = device.label || `Camera ${index}`;
+            });
+
+            audioDevices.forEach((device, index) => {
+                audioDeviceNames[index] = device.label || `Audio Device ${index}`;
+            });
+
+            // 发送设备名称到服务器
+            await fetch('/api/device_names', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    deviceNames,
+                    audioDeviceNames
+                })
+            });
+
             
             videoDevices.forEach((device, index) => {
                 deviceNames.video[index] = device.label || `Camera ${index}`;
@@ -368,7 +387,8 @@ async function updateStatus() {
 
         let statusHtml = `
             <p>Status: ${status.is_running ? 'Running' : 'Stopped'}</p>
-            <p>Camera: ${status.current_camera !== null ? status.current_camera : 'None'}</p>
+            <p>Camera: ${status.current_camera_name || 'None'}</p>
+            <p>Audio: ${status.current_audio_name || 'None'}</p>
             <p>Resolution: ${status.camera_info.width || 0}x${status.camera_info.height || 0}</p>
             <p>FPS: ${status.fps || 0}</p>
             <p>Analysis: ${status.analysis_enabled ? 'Enabled' : 'Disabled'}</p>

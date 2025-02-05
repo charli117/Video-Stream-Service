@@ -8,4 +8,4 @@ if __name__ == '__main__':
     os.makedirs('static', exist_ok=True)
 
     app = create_app()
-    app.run(host='0.0.0.0', port=5008, debug=False)
+    app.run(host='0.0.0.0', port=5008, debug=True)
