@@ -27,45 +27,6 @@ def video_feed():
         return "Video feed error", 500
 
 
-@main_bp.route('/api/cameras')
-def list_cameras():
-    """获取可用摄像头列表"""
-    try:
-        cameras = Camera.list_cameras()
-        current_camera = video_analyzer.video_source
-
-        return jsonify({
-            'cameras': cameras,
-            'current': current_camera
-        })
-    except Exception as e:
-        logger.error(f"Error listing cameras: {str(e)}")
-        return jsonify({
-            'cameras': [],
-            'current': None,
-            'error': str(e)
-        }), 500
-
-
-@main_bp.route('/api/camera/switch', methods=['POST'])
-def switch_camera():
-    """切换摄像头"""
-    try:
-        data = request.get_json()
-        camera_index = int(data.get('camera_index', 0))
-
-        if not Camera._is_valid_camera(camera_index):
-            return jsonify({
-                'success': False,
-                'error': f'Camera {camera_index} is not available'
-            }), 400
-
-        success = video_analyzer.switch_camera(camera_index)
-        return jsonify({'success': success})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
-
-
 @main_bp.route('/api/devices')
 def list_devices():
     """获取可用设备列表"""
@@ -98,7 +59,8 @@ def switch_devices():
         camera_index = int(data.get('camera_index', 0))
         audio_index = int(data.get('audio_index', 0))
 
-        if not Camera._is_valid_camera(camera_index):
+        # 使用公共方法替代直接访问
+        if not Camera.is_valid_camera(camera_index):
             return jsonify({
                 'success': False,
                 'error': f'Camera {camera_index} is not available'
@@ -125,11 +87,11 @@ def update_device_names():
         data = request.get_json()
         device_names = data.get('deviceNames', {})
         audio_device_names = data.get('audioDeviceNames', {})
-        
+
         # 更新摄像头和音频设备名称映射
         Camera.update_device_names(device_names)
         AudioAnalyzer.update_device_names(audio_device_names)
-        
+
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
@@ -139,19 +101,22 @@ def update_device_names():
 def get_status():
     """获取当前状态"""
     try:
+        current_camera_index = str(video_analyzer.video_source)
+        current_audio_index = str(audio_analyzer.current_device)
+
         status = {
             'is_running': video_analyzer.is_running,
             'current_camera': video_analyzer.video_source,
-            'current_camera_name': Camera._device_names.get(str(video_analyzer.video_source),
-                                                            f'Camera {video_analyzer.video_source}'),
+            'current_camera_name': Camera.get_device_name(current_camera_index),
             'current_audio_device': audio_analyzer.current_device,
-            'current_audio_name': AudioAnalyzer._device_names.get(str(audio_analyzer.current_device),
-                                                                  f'Audio Device {audio_analyzer.current_device}'),
+            'current_audio_name': AudioAnalyzer._device_names.get(current_audio_index,
+                                                                  f'Audio Device {current_audio_index}'),
             'fps': video_analyzer.fps,
             'camera_info': {},
             'analysis_enabled': video_analyzer.analysis_enabled,
             'frame_changed': not video_analyzer.change_queue.empty(),
-            'frame_changes': []
+            'frame_changes': [],
+            'audio_changes': []
         }
 
         if video_analyzer.camera and video_analyzer.camera.is_initialized:
@@ -160,9 +125,10 @@ def get_status():
                 'height': video_analyzer.camera.height,
                 'fps': video_analyzer.camera.fps,
                 'initialized': True,
-                'name': Camera._device_names.get(str(video_analyzer.video_source), "Unknown Camera")
+                'name': Camera.get_device_name(current_camera_index)
             }
 
+        # 获取音、视频帧变化记录
         if status['analysis_enabled']:
             try:
                 output_dir = video_analyzer.output_dir
@@ -171,7 +137,6 @@ def get_status():
                     key=lambda x: os.path.getmtime(os.path.join(output_dir, x)),
                     reverse=True
                 )[:10]
-
                 for img_file in image_files:
                     file_path = os.path.join(output_dir, img_file)
                     timestamp = os.path.getmtime(file_path)
@@ -179,13 +144,7 @@ def get_status():
                         'time': timestamp,
                         'image_url': f'/static/output/{img_file}'
                     })
-            except Exception as e:
-                logger.error(f"Error getting frame changes: {str(e)}")
 
-        # 添加音频变化记录
-        if audio_analyzer.is_running:
-            try:
-                output_dir = audio_analyzer.output_dir
                 audio_files = sorted(
                     [f for f in os.listdir(output_dir) if f.endswith('.wav')],
                     key=lambda x: os.path.getmtime(os.path.join(output_dir, x)),
@@ -199,10 +158,12 @@ def get_status():
                         'time': timestamp,
                         'audio_url': f'/static/output/{audio_file}'
                     })
+
             except Exception as e:
-                logger.error(f"Error getting audio changes: {str(e)}")
+                logger.error(f"Error getting frame changes: {str(e)}")
 
         return jsonify(status)
+
     except Exception as e:
         logger.error(f"Error getting status: {str(e)}")
         return jsonify({
@@ -215,7 +176,9 @@ def get_status():
             'current_devices': {
                 'camera': "Not Connected",
                 'audio': "Not Connected"
-            }
+            },
+            'frame_changes': [],
+            'audio_changes': []
         }), 500
 
 
@@ -225,25 +188,3 @@ def toggle_analysis():
     enabled = data.get('enabled', False)
     success = video_analyzer.toggle_analysis(enabled)
     return jsonify({'success': success, 'analysis_enabled': video_analyzer.analysis_enabled})
-
-
-@main_bp.route('/api/toggle_audio', methods=['POST'])
-def toggle_audio():
-    try:
-        data = request.get_json()
-        enabled = data.get('enabled', False)
-
-        if enabled:
-            audio_analyzer.start()
-        else:
-            audio_analyzer.stop()
-
-        return jsonify({
-            'success': True,
-            'audio_enabled': enabled
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500

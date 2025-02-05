@@ -17,6 +17,16 @@ class Camera:
         self._buffer_size = InitialConfig.MAX_QUEUE_SIZE
 
     @staticmethod
+    def is_valid_camera(index):
+        """公共方法：检查摄像头是否有效"""
+        return Camera._is_valid_camera(index)
+
+    @classmethod
+    def get_device_name(cls, index):
+        """公共方法：获取设备名称"""
+        return cls._device_names.get(str(index), f'Camera {index}')
+
+    @staticmethod
     def _is_valid_camera(index):
         """检查摄像头是否有效"""
         try:

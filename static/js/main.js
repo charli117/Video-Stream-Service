@@ -223,12 +223,15 @@ async function switchCamera() {
         document.getElementById('switchButton').disabled = true;
         document.getElementById('refreshButton').disabled = true;
 
-        const response = await fetch("/api/camera/switch", {
+        const response = await fetch("/api/devices/switch", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({camera_index: cameraIndex})
+            body: JSON.stringify({
+                camera_index: cameraIndex,
+                audio_index: currentAudioDevice // 使用全局变量 currentAudioDevice
+            })
         });
 
         const result = await response.json();
