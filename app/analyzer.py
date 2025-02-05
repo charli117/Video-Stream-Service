@@ -6,7 +6,6 @@ import threading
 import base64
 import sounddevice as sd
 import soundfile as sf
-import librosa
 import numpy as np
 
 from datetime import datetime
@@ -17,11 +16,13 @@ from collections import deque
 from app.camera import Camera
 from config import InitialConfig
 from logging.handlers import RotatingFileHandler
+import librosa.feature as librosa_feature
 from skimage.metrics import structural_similarity as ssim
 
 
 class BaseAnalyzer:
     def __init__(self):
+        self.logger = logging.getLogger('BaseAnalyzer')
         self.frame_queue = Queue(maxsize=10)
         self.change_queue = Queue(maxsize=5)
         self.processed_frames = Queue(maxsize=2)
@@ -115,7 +116,7 @@ class BaseAnalyzer:
 
             # 转换为base64
             _, buffer = cv2.imencode('.jpg', image)
-            base64_image = base64.b64encode(buffer).decode('utf-8')
+            base64_image = base64.b64encode(buffer.tobytes()).decode('utf-8')
 
             self.logger.info(f"Image saved successfully: {filepath}")
 
@@ -181,15 +182,33 @@ class BaseAnalyzer:
         console_handler.setFormatter(logging.Formatter(InitialConfig.LOG_FORMAT))
         self.logger.addHandler(console_handler)
 
+    def _thread_wrapper(self, target_func, thread_name):
+        """线程包装器，用于异常处理和状态管理"""
+        try:
+            while self.is_running:
+                if self.analysis_enabled or thread_name != "analyze":  # 允许非分析线程继续运行
+                    target_func()
+                time.sleep(0.01)  # 避免空循环占用CPU
+        except Exception as e:
+            self.logger.error(f"{thread_name} thread error: {str(e)}")
+        finally:
+            self.logger.info(f"{thread_name} thread stopped")
+
     def _start_threads(self):
         """启动分析线程"""
         self._threads = [
-            Thread(target=self._analyze_loop),
-            Thread(target=self._llm_loop)  # 改用 _llm_loop 而不是 _llm_analyze
+            Thread(target=self._thread_wrapper, 
+                   args=(self._analyze_loop, "analyze"),
+                   name="AnalyzeThread"),
+            Thread(target=self._thread_wrapper, 
+                   args=(self._llm_loop, "llm"),
+                   name="LLMThread")
         ]
+        
         for thread in self._threads:
             thread.daemon = True
             thread.start()
+            self.logger.info(f"Started thread: {thread.name}")
 
     def _analyze_loop(self):
         """分析循环，子类需要实现"""
@@ -244,9 +263,25 @@ class BaseAnalyzer:
     def toggle_analysis(self, enabled):
         """切换分析状态"""
         with self._status_lock:
-            self.analysis_enabled = enabled
-            self.logger.info(f"Analysis {'enabled' if enabled else 'disabled'}")
-            return True
+            try:
+                previous_state = self.analysis_enabled
+                self.analysis_enabled = enabled
+                self.logger.info(f"Analysis state changed: {previous_state} -> {enabled}")
+
+                # 添加队列清理
+                if not enabled:
+                    self._clear_queues()
+
+                # 添加更详细的状态日志
+                if enabled:
+                    self.logger.info("Analysis started - now monitoring for changes")
+                else:
+                    self.logger.info("Analysis stopped - no longer monitoring for changes")
+
+                return True
+            except Exception as e:
+                self.logger.error(f"Error toggling analysis: {str(e)}")
+                return False
 
     def _llm_loop(self):
         """LLM处理循环"""
@@ -281,10 +316,9 @@ class VideoAnalyzer(BaseAnalyzer):
             return
 
         try:
-            self.is_running = True
             self.video_source = video_source
             self.camera.start(video_source)
-            super().start()  # 使用父类的 start 方法来启动线程
+            super().start()  # 使用父类的线程管理机制
             self.logger.info("VideoAnalyzer started")
 
         except Exception as e:
@@ -465,6 +499,7 @@ class AudioAnalyzer(BaseAnalyzer):
         self.sample_rate = InitialConfig.AUDIO_SAMPLE_RATE
         self.chunk_size = InitialConfig.AUDIO_CHUNK_SIZE
         self.threshold = InitialConfig.AUDIO_CHANGE_THRESHOLD
+        self.stream = None
         
     @classmethod
     def update_device_names(cls, device_names):
@@ -509,17 +544,43 @@ class AudioAnalyzer(BaseAnalyzer):
         """启动音频分析器"""
         if self.is_running:
             return
-            
+        
         try:
+            # 验证当前设备是否可用
+            devices = sd.query_devices()
+            if self.current_device >= len(devices):
+                raise ValueError(f"Invalid device index: {self.current_device}")
+                
+            device_info = devices[self.current_device]
+            if device_info['max_input_channels'] <= 0:
+                raise ValueError(f"Device {self.current_device} has no input channels")
+                
+            # 使用设备实际支持的参数
+            channels = min(device_info['max_input_channels'], InitialConfig.AUDIO_CHANNELS)
+            sample_rate = int(device_info['default_samplerate'])
+            
+            # 更新实例的采样率为设备实际支持的值
+            self.sample_rate = sample_rate
+            
+            self.logger.info(f"Initializing audio device {self.current_device} "
+                            f"({device_info['name']}) with {channels} channels "
+                            f"at {sample_rate}Hz")
+            
+            # 先启动父类的线程管理机制
+            super().start()
+            
+            # 初始化并启动音频流
             self.stream = sd.InputStream(
                 device=self.current_device,
-                channels=1,
-                samplerate=self.sample_rate,
+                channels=channels,
+                samplerate=sample_rate,
                 callback=self._audio_callback,
                 blocksize=self.chunk_size
             )
             self.stream.start()
-            super().start()
+            
+            self.logger.info("AudioAnalyzer started successfully")
+            
         except Exception as e:
             self.is_running = False
             self.logger.error(f"Failed to start audio analyzer: {str(e)}")
@@ -539,8 +600,10 @@ class AudioAnalyzer(BaseAnalyzer):
         """音频回调函数"""
         if status:
             self.logger.warning(f"Audio callback status: {status}")
-        if not self.audio_queue.full() and self.analysis_enabled:
-            self.audio_queue.put(indata.copy())
+        if self.is_running and not self.audio_queue.full() and self.analysis_enabled:
+            # 确保数据是正确的格式
+            if isinstance(indata, np.ndarray):
+                self.audio_queue.put(indata.copy())
             
     def _analyze_loop(self):
         """音频分析循环"""
@@ -553,7 +616,7 @@ class AudioAnalyzer(BaseAnalyzer):
                         if self._detect_audio_change(audio_data):
                             self.logger.info("Significant audio change detected")
                             self._save_audio_change(audio_data)
-                            
+                    
                     self.last_audio = audio_data.copy()
                     
             except Exception as e:
@@ -562,13 +625,17 @@ class AudioAnalyzer(BaseAnalyzer):
             
     def _detect_audio_change(self, audio_data):
         """Detect audio changes using MFCC features"""
-        if self.last_audio is None:
+        if self.last_audio is None or not isinstance(audio_data, np.ndarray):
             return False
             
         try:
-            # Calculate audio features
-            mfcc1 = librosa.feature.mfcc(y=self.last_audio.flatten(), sr=self.sample_rate)
-            mfcc2 = librosa.feature.mfcc(y=audio_data.flatten(), sr=self.sample_rate)
+            # 确保音频数据是浮点型
+            last_audio = self.last_audio.astype(np.float32).flatten()
+            current_audio = audio_data.astype(np.float32).flatten()
+            
+            # 使用完整的导入路径计算音频特征
+            mfcc1 = librosa_feature.mfcc(y=last_audio, sr=self.sample_rate)
+            mfcc2 = librosa_feature.mfcc(y=current_audio, sr=self.sample_rate)
             
             # Calculate similarity
             similarity = np.corrcoef(mfcc1.flatten(), mfcc2.flatten())[0, 1]
@@ -602,4 +669,3 @@ class AudioAnalyzer(BaseAnalyzer):
             
         except Exception as e:
             self.logger.error(f"Failed to save audio change: {str(e)}")
-

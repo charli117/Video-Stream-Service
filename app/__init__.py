@@ -23,8 +23,22 @@ def create_app():
 
     # 初始化分析器
     try:
+        # 先获取可用的音频设备
+        available_devices = AudioAnalyzer.list_devices()
+        if available_devices:
+            # 设置第一个可用的音频设备
+            audio_analyzer.current_device = available_devices[0]['index']
+            app.logger.info(f"Using audio device: {available_devices[0]['name']}")
+        else:
+            app.logger.warning("No audio input devices found")
+            
+        # 启动视频分析器
         video_analyzer.start(InitialConfig.DEFAULT_CAMERA_INDEX)
-        audio_analyzer.start()
+        
+        # 启动音频分析器
+        if available_devices:
+            audio_analyzer.start()
+        
     except Exception as e:
         app.logger.error(f"Failed to initialize analyzers: {str(e)}")
 
