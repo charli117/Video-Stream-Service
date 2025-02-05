@@ -143,7 +143,7 @@ class VideoAnalyzer:
                                buffer.tobytes() + b'\r\n')
 
                         # 将原始帧放入队列供分析使用
-                        if not self.frame_queue.full():
+                        if not self.frame_queue.full() and self.analysis_enabled:
                             self.frame_queue.put(frame.copy())
 
             except Exception as e:
