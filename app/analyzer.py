@@ -5,6 +5,7 @@ import json
 import logging
 import threading
 import base64
+import config
 
 from datetime import datetime
 from threading import Thread
@@ -33,11 +34,11 @@ class VideoAnalyzer:
         self._threads = []
         self._frame_times = deque(maxlen=30)
         self._last_frame_time = time.time()
-        self.max_saved_images = 1000
+        self.max_saved_images = config.MAX_SAVED_IMAGES
         self._status_lock = threading.Lock()  # 添加状态锁
-        self.max_display_height = 720  # 最大显示高度，用于等比缩放
-        self.scale_percent = 80  # JPEG压缩质量
-        self.output_dir = './static/output'
+        self.max_display_height = config.MAX_DISPLAY_HEIGHT  # 最大显示高度，用于等比缩放
+        self.scale_percent = config.SCALE_PERCENT  # JPEG压缩质量
+        self.output_dir = config.OUTPUT_DIR
 
     # def update_fps(self):
     #     """更新FPS计算"""
@@ -185,7 +186,7 @@ class VideoAnalyzer:
             logger.error(f"Error saving image: {str(e)}")
             return None
 
-    def cleanup_old_images(self, max_files=1000):
+    def cleanup_old_images(self, max_files=config.MAX_SAVED_IMAGES):
         """清理旧图像文件"""
         try:
             # 获取目录中的所有图像文件

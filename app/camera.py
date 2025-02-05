@@ -1,6 +1,7 @@
 import cv2
 import time
 import logging
+import config
 
 
 class Camera:
@@ -11,7 +12,7 @@ class Camera:
         self.height = None
         self.fps = 30
         self.is_initialized = False
-        self._buffer_size = 3
+        self._buffer_size = config.MAX_QUEUE_SIZE
 
     @staticmethod
     def _is_valid_camera(index):
