@@ -13,12 +13,12 @@ class InitialConfig:
     MAX_DISPLAY_HEIGHT = 720
     MAX_SAVED_IMAGES = 1000
 
-    # 音频配置
+    # Audio Configuration
     AUDIO_SAMPLE_RATE = 44100
     AUDIO_CHUNK_SIZE = 4096
     AUDIO_CHANNELS = 1
-    AUDIO_CHANGE_THRESHOLD = 0.6
-    MAX_SAVED_FILES = 1000  # 视频和音频文件共用
+    AUDIO_CHANGE_THRESHOLD = 0.5  # 降低阈值使检测更敏感
+    MAX_SAVED_FILES = 1000
     
     # 日志配置
     LOG_PATH = 'logs/video_analyzer.log'

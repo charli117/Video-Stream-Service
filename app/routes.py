@@ -66,6 +66,71 @@ def switch_camera():
         return jsonify({'success': False, 'error': str(e)}), 400
 
 
+@main_bp.route('/api/devices')
+def list_devices():
+    """获取可用设备列表"""
+    try:
+        cameras = Camera.list_cameras()
+        audio_devices = AudioAnalyzer.list_devices()
+        
+        return jsonify({
+            'cameras': cameras,
+            'audioDevices': audio_devices,
+            'currentCamera': video_analyzer.video_source,
+            'currentAudioDevice': audio_analyzer.current_device
+        })
+    except Exception as e:
+        logger.error(f"Error listing devices: {str(e)}")
+        return jsonify({
+            'cameras': [],
+            'audioDevices': [],
+            'currentCamera': None,
+            'currentAudioDevice': None,
+            'error': str(e)
+        }), 500
+
+@main_bp.route('/api/devices/switch', methods=['POST'])
+def switch_devices():
+    """切换设备"""
+    try:
+        data = request.get_json()
+        camera_index = int(data.get('camera_index', 0))
+        audio_index = int(data.get('audio_index', 0))
+
+        if not Camera._is_valid_camera(camera_index):
+            return jsonify({
+                'success': False,
+                'error': f'Camera {camera_index} is not available'
+            }), 400
+
+        camera_success = video_analyzer.switch_camera(camera_index)
+        audio_success = audio_analyzer.switch_device(audio_index)
+
+        if not camera_success or not audio_success:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to switch one or more devices'
+            }), 400
+
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@main_bp.route('/api/device_names', methods=['POST'])
+def update_device_names():
+    """更新设备名称"""
+    try:
+        data = request.get_json()
+        device_names = data.get('deviceNames', {})
+        
+        Camera.update_device_names(device_names.get('video', {}))
+        AudioAnalyzer.update_device_names(device_names.get('audio', {}))
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
 @main_bp.route('/api/status')
 def get_status():
     try:

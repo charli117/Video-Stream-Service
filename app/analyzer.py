@@ -1,7 +1,6 @@
 import os
 import time
 import cv2
-import json
 import logging
 import threading
 import base64
@@ -18,7 +17,6 @@ from collections import deque
 from app.camera import Camera
 from config import InitialConfig
 from logging.handlers import RotatingFileHandler
-from flask import Flask, render_template, Response
 from skimage.metrics import structural_similarity as ssim
 
 
@@ -61,36 +59,28 @@ class BaseAnalyzer:
         self._clear_queues()
         self.logger.info(f"{self.__class__.__name__} stopped")
 
-    def cleanup_old_files(self, extension):
-        """清理旧文件"""
+    def cleanup_old_files(self, extension, max_files=None):
+        """
+        清理旧文件
+        Args:
+            extension: 文件扩展名，如 '.jpg' 或 '.wav'
+            max_files: 最大保留文件数，默认使用配置中的值
+        """
         try:
+            # 根据文件类型确定最大保留数量
+            if max_files is None:
+                max_files = (InitialConfig.MAX_SAVED_IMAGES 
+                           if extension == '.jpg' 
+                           else InitialConfig.MAX_SAVED_FILES)
+
             files = [f for f in os.listdir(self.output_dir) if f.endswith(extension)]
-            if len(files) > self.max_saved_files:
+            if len(files) > max_files:
                 files.sort(key=lambda x: os.path.getmtime(os.path.join(self.output_dir, x)))
-                for f in files[:(len(files) - self.max_saved_files)]:
+                for f in files[:(len(files) - max_files)]:
                     os.remove(os.path.join(self.output_dir, f))
                     self.logger.info(f"Deleted old file: {f}")
         except Exception as e:
             self.logger.error(f"Error cleaning up old files: {str(e)}")
-
-    def cleanup_old_images(self, max_files=InitialConfig.MAX_SAVED_IMAGES):
-        """清理旧图像文件"""
-        try:
-            # 获取目录中的所有图像文件
-            files = [f for f in os.listdir(self.output_dir) if f.endswith('.jpg')]
-
-            # 如果文件数量超过最大值，删除最旧的文件
-            if len(files) > max_files:
-                # 按修改时间排序
-                files.sort(key=lambda x: os.path.getmtime(os.path.join(self.output_dir, x)))
-
-                # 删除多余的文件
-                for f in files[:(len(files) - max_files)]:
-                    os.remove(os.path.join(self.output_dir, f))
-                    self.logger.info(f"Deleted old image: {f}")
-
-        except Exception as e:
-            self.logger.error(f"Error cleaning up old images: {str(e)}")
 
     def _clear_queues(self):
         """清空所有队列"""
@@ -138,39 +128,39 @@ class BaseAnalyzer:
             self.logger.error(f"Error saving image: {str(e)}")
             return None
 
-    def llm_loop(self):
-        """LLM处理循环"""
-        def call_llm_service(image):
-            try:
-                # 清理旧图像
-                self.cleanup_old_images()
-
-                # 保存图像并获取base64
-                result = self.save_base64_image(image)
-                if result is None and isinstance(result, dict):
-                    self.logger.error("Failed to save image")
-                    return
-
-                self.logger.info(f"Image saved: {result['filepath']}")
-
-                # TODO: 在这里添加实际的LLM服务调用代码
-                # 例如：
-                # response = llm_client.analyze_image(result['base64_image'])
-                # return response
-
-            except Exception as err:
-                self.logger.error(f"Error in LLM service: {str(err)}")
-
-        while self.is_running:
-            try:
-                if not self.change_queue.empty():
-                    concat_frame = self.change_queue.get()
-                    # 异步调用LLM服务
-                    Thread(target=call_llm_service, args=(concat_frame,)).start()
-            except Exception as e:
-                self.logger.error(f"Error in LLM loop: {str(e)}")
-
-            time.sleep(0.1)
+    # def llm_loop(self):
+    #     """LLM处理循环"""
+    #     def call_llm_service(image):
+    #         try:
+    #             # 清理旧图像
+    #             self.cleanup_old_images()
+    #
+    #             # 保存图像并获取base64
+    #             result = self.save_base64_image(image)
+    #             if result is None and isinstance(result, dict):
+    #                 self.logger.error("Failed to save image")
+    #                 return
+    #
+    #             self.logger.info(f"Image saved: {result['filepath']}")
+    #
+    #             # TODO: 在这里添加实际的LLM服务调用代码
+    #             # 例如：
+    #             # response = llm_client.analyze_image(result['base64_image'])
+    #             # return response
+    #
+    #         except Exception as err:
+    #             self.logger.error(f"Error in LLM service: {str(err)}")
+    #
+    #     while self.is_running:
+    #         try:
+    #             if not self.change_queue.empty():
+    #                 concat_frame = self.change_queue.get()
+    #                 # 异步调用LLM服务
+    #                 Thread(target=call_llm_service, args=(concat_frame,)).start()
+    #         except Exception as e:
+    #             self.logger.error(f"Error in LLM loop: {str(e)}")
+    #
+    #         time.sleep(0.1)
 
     def _setup_logging(self):
         """设置日志"""
@@ -195,7 +185,7 @@ class BaseAnalyzer:
         """启动分析线程"""
         self._threads = [
             Thread(target=self._analyze_loop),
-            Thread(target=self.llm_loop)
+            Thread(target=self._llm_analyze)
         ]
         for thread in self._threads:
             thread.daemon = True
@@ -210,7 +200,7 @@ class BaseAnalyzer:
         try:
             # 清理旧文件
             extension = '.jpg' if isinstance(data, np.ndarray) else '.wav'
-            self.cleanup_old_files(extension)
+            self.cleanup_old_files(extension)  # 更新调用
 
             # 保存数据
             if isinstance(data, np.ndarray):
@@ -258,6 +248,17 @@ class BaseAnalyzer:
             self.logger.info(f"Analysis {'enabled' if enabled else 'disabled'}")
             return True
 
+    def _llm_loop(self):
+        """LLM处理循环"""
+        while self.is_running:
+            try:
+                if not self.change_queue.empty():
+                    concat_frame = self.change_queue.get()
+                    self._llm_analyze(concat_frame)
+            except Exception as e:
+                self.logger.error(f"Error in LLM loop: {str(e)}")
+            time.sleep(0.1)
+
 
 class VideoAnalyzer(BaseAnalyzer):
     def __init__(self):
@@ -283,17 +284,7 @@ class VideoAnalyzer(BaseAnalyzer):
             self.is_running = True
             self.video_source = video_source
             self.camera.start(video_source)
-
-            # 启动分析线程
-            self._threads = [
-                Thread(target=self._analyze_loop),
-                Thread(target=self._llm_loop)
-            ]
-
-            for thread in self._threads:
-                thread.daemon = True
-                thread.start()
-
+            super().start()  # 使用父类的 start 方法来启动线程
             self.logger.info("VideoAnalyzer started")
 
         except Exception as e:
@@ -460,28 +451,60 @@ class VideoAnalyzer(BaseAnalyzer):
             self.logger.error(f"Error resizing frame: {str(e)}")
             return frame
 
-    def _llm_loop(self):
-        """LLM处理循环"""
-        while self.is_running:
-            try:
-                if not self.change_queue.empty():
-                    concat_frame = self.change_queue.get()
-                    self._llm_analyze(concat_frame)
-            except Exception as e:
-                self.logger.error(f"Error in LLM loop: {str(e)}")
-            time.sleep(0.1)
-
 
 class AudioAnalyzer(BaseAnalyzer):
+    _device_names = {}  # 类变量，用于存储设备名称映射
+    
     def __init__(self):
         super().__init__()
+        # 添加 logger 初始化
+        self.logger = logging.getLogger('AudioAnalyzer')
+        self.current_device = 0
         self.audio_queue = Queue(maxsize=10)
-        self.sample_rate = 44100
-        self.chunk_size = 1024 * 4
-        self.threshold = 0.6
         self.last_audio = None
-        self.stream = None
+        self.sample_rate = InitialConfig.AUDIO_SAMPLE_RATE
+        self.chunk_size = InitialConfig.AUDIO_CHUNK_SIZE
+        self.threshold = InitialConfig.AUDIO_CHANGE_THRESHOLD
         
+    @classmethod
+    def update_device_names(cls, device_names):
+        """更新设备名称映射"""
+        cls._device_names = device_names
+        
+    @staticmethod
+    def list_devices():
+        """列出所有可用音频输入设备"""
+        try:
+            devices = sd.query_devices()
+            available_devices = []
+            
+            for i, device in enumerate(devices):
+                if device['max_input_channels'] > 0:
+                    info = {
+                        'index': i,
+                        'name': AudioAnalyzer._device_names.get(str(i), device['name']),
+                        'channels': device['max_input_channels'],
+                        'sample_rate': device['default_samplerate']
+                    }
+                    available_devices.append(info)
+                    
+            return available_devices
+        except Exception as e:
+            logging.error(f"Error listing audio devices: {str(e)}")
+            return []
+            
+    def switch_device(self, device_index):
+        """切换音频输入设备"""
+        try:
+            self.stop()
+            time.sleep(0.5)
+            self.current_device = device_index
+            self.start()
+            return True
+        except Exception as e:
+            self.logger.error(f"Error switching audio device: {str(e)}")
+            return False
+            
     def start(self):
         """启动音频分析器"""
         if self.is_running:
@@ -489,6 +512,7 @@ class AudioAnalyzer(BaseAnalyzer):
             
         try:
             self.stream = sd.InputStream(
+                device=self.current_device,
                 channels=1,
                 samplerate=self.sample_rate,
                 callback=self._audio_callback,
@@ -510,16 +534,6 @@ class AudioAnalyzer(BaseAnalyzer):
             self.stream.stop()
             self.stream.close()
         super().stop()
-
-    def _start_threads(self):
-        """启动音频分析线程"""
-        self._threads = [
-            Thread(target=self._analyze_loop),
-            Thread(target=self.llm_loop)
-        ]
-        for thread in self._threads:
-            thread.daemon = True
-            thread.start()
             
     def _audio_callback(self, indata, frames, time, status):
         """音频回调函数"""
@@ -547,72 +561,45 @@ class AudioAnalyzer(BaseAnalyzer):
             time.sleep(0.01)
             
     def _detect_audio_change(self, audio_data):
-        """检测音频变化"""
+        """Detect audio changes using MFCC features"""
         if self.last_audio is None:
             return False
             
         try:
-            # 计算音频特征
+            # Calculate audio features
             mfcc1 = librosa.feature.mfcc(y=self.last_audio.flatten(), sr=self.sample_rate)
             mfcc2 = librosa.feature.mfcc(y=audio_data.flatten(), sr=self.sample_rate)
             
-            # 计算相似度
+            # Calculate similarity
             similarity = np.corrcoef(mfcc1.flatten(), mfcc2.flatten())[0, 1]
+            
+            # Add detailed logging
+            if similarity < self.threshold:
+                self.logger.info(f"Audio change detected - Similarity: {similarity:.3f} (Threshold: {self.threshold})")
+            
             return similarity < self.threshold
             
         except Exception as e:
-            self.logger.error(f"Error detecting audio change: {str(e)}")
+            self.logger.error(f"Error in audio change detection: {str(e)}")
             return False
             
     def _save_audio_change(self, audio_data):
-        """保存音频变化"""
+        """Save detected audio changes"""
         try:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
             filename = f'audio_change_{timestamp}.wav'
             filepath = os.path.join(self.output_dir, filename)
             
-            # 保存音频文件
-            sf.write(filepath, audio_data, self.sample_rate)
+            # Ensure output directory exists
+            os.makedirs(self.output_dir, exist_ok=True)
             
-            # 记录变化
+            # Save audio file
+            sf.write(filepath, audio_data, self.sample_rate)
+            self.logger.info(f"Audio change saved: {filepath}")
+            
+            # Process with LLM
             self._llm_analyze(audio_data)
             
         except Exception as e:
-            self.logger.error(f"Error saving audio change: {str(e)}")
+            self.logger.error(f"Failed to save audio change: {str(e)}")
 
-
-class VideoWeb:
-    def __init__(self, analyzer):
-        self.app = Flask(__name__)
-        self.analyzer = analyzer
-
-        @self.app.route('/')
-        def index():
-            return render_template('index.html')
-
-        @self.app.route('/video_feed')
-        def video_feed():
-            return Response(self.generate_frames(),
-                            mimetype='multipart/x-mixed-replace; boundary=frame')
-
-        @self.app.route('/stats')
-        def stats():
-            return json.dumps({
-                'fps': self.analyzer.fps,
-                'queue_size': self.analyzer.frame_queue.qsize(),
-                'running': self.analyzer.is_running,
-                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            })
-
-    def generate_frames(self):
-        while True:
-            if not self.analyzer.processed_frames.empty():
-                frame = self.analyzer.processed_frames.get()
-                ret, buffer = cv2.imencode('.jpg', frame)
-                frame = buffer.tobytes()
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-            time.sleep(0.01)
-
-    def run(self, host='0.0.0.0', port=5008):
-        self.app.run(host=host, port=port, threaded=True)

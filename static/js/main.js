@@ -47,7 +47,7 @@ function showImageViewer(imageUrl) {
     };
 }
 
-async function loadCameras() {
+async function loadDevices() {
     try {
         const refreshButton = document.getElementById('refreshButton');
         const switchButton = document.getElementById('switchButton');
@@ -59,13 +59,23 @@ async function loadCameras() {
         if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
             const devices = await navigator.mediaDevices.enumerateDevices();
             const videoDevices = devices.filter(device => device.kind === 'videoinput');
-            const deviceNames = {};
+            const audioDevices = devices.filter(device => device.kind === 'audioinput');
+            
+            const deviceNames = {
+                video: {},
+                audio: {}
+            };
+            
             videoDevices.forEach((device, index) => {
-                deviceNames[index] = device.label || `Camera ${index}`;
+                deviceNames.video[index] = device.label || `Camera ${index}`;
+            });
+            
+            audioDevices.forEach((device, index) => {
+                deviceNames.audio[index] = device.label || `Microphone ${index}`;
             });
 
             // 发送设备名称到服务器
-            await fetch('/api/camera_names', {
+            await fetch('/api/device_names', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -74,42 +84,112 @@ async function loadCameras() {
             });
         }
 
-        // 获取摄像头列表
-        const response = await fetch("/api/cameras");
+        // 获取设备列表
+        const response = await fetch("/api/devices");
         const data = await response.json();
 
-        const select = document.getElementById('cameraSelect');
-        select.innerHTML = '';
-
-        // 使用data.cameras而不是直接使用返回数据
-        if (!data.cameras || data.cameras.length === 0) {
-            select.innerHTML = '<option value="">No cameras found</option>';
-            return;
+        // 更新摄像头选择
+        const cameraSelect = document.getElementById('cameraSelect');
+        cameraSelect.innerHTML = '';
+        
+        if (data.cameras && data.cameras.length > 0) {
+            data.cameras.forEach(camera => {
+                const option = document.createElement('option');
+                option.value = camera.index;
+                option.text = `${camera.name} (${camera.width}x${camera.height} @ ${camera.fps}fps)`;
+                if (camera.index === data.currentCamera) {
+                    option.selected = true;
+                }
+                cameraSelect.appendChild(option);
+            });
+        } else {
+            cameraSelect.innerHTML = '<option value="">No cameras found</option>';
         }
 
-        // 更新当前摄像头
-        currentCamera = data.current;
+        // 更新音频设备选择
+        const audioSelect = document.getElementById('audioSelect');
+        audioSelect.innerHTML = '';
+        
+        if (data.audioDevices && data.audioDevices.length > 0) {
+            data.audioDevices.forEach(device => {
+                const option = document.createElement('option');
+                option.value = device.index;
+                option.text = device.name;
+                if (device.index === data.currentAudioDevice) {
+                    option.selected = true;
+                }
+                audioSelect.appendChild(option);
+            });
+        } else {
+            audioSelect.innerHTML = '<option value="">No audio devices found</option>';
+        }
 
-        // 遍历cameras数组
-        data.cameras.forEach(camera => {
-            const option = document.createElement('option');
-            option.value = camera.index;
-            option.text = `${camera.name} (${camera.width}x${camera.height} @ ${camera.fps}fps)`;
-            if (camera.index === currentCamera) {
-                option.selected = true;
-            }
-            select.appendChild(option);
-        });
-
+        currentCamera = data.currentCamera;
+        currentAudioDevice = data.currentAudioDevice;
         switchButton.disabled = false;
 
     } catch (error) {
-        showError('Error loading cameras: ' + error.message);
+        showError('Error loading devices: ' + error.message);
     } finally {
-        // 重新启用刷新按钮
+        refreshButton.disabled = false;
+    }
+}
+
+async function switchDevices() {
+    const cameraSelect = document.getElementById('cameraSelect');
+    const audioSelect = document.getElementById('audioSelect');
+    const cameraIndex = parseInt(cameraSelect.value);
+    const audioIndex = parseInt(audioSelect.value);
+
+    if (isNaN(cameraIndex) || isNaN(audioIndex)) {
+        showError('Please select both camera and audio device');
+        return;
+    }
+
+    try {
+        document.getElementById('switchButton').disabled = true;
+        document.getElementById('refreshButton').disabled = true;
+
+        const response = await fetch("/api/devices/switch", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                camera_index: cameraIndex,
+                audio_index: audioIndex
+            })
+        });
+
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.error || 'Failed to switch devices');
+        }
+
+        currentCamera = cameraIndex;
+        currentAudioDevice = audioIndex;
+
+        // 刷新视频源
+        const videoFeed = document.getElementById('videoFeed');
+        videoFeed.src = "/video_feed?" + new Date().getTime();
+
+        hideError();
+
+    } catch (error) {
+        showError('Error switching devices: ' + error.message);
+    } finally {
+        document.getElementById('switchButton').disabled = false;
         document.getElementById('refreshButton').disabled = false;
     }
 }
+
+// 替换原有的 loadCameras 函数调用
+document.addEventListener('DOMContentLoaded', () => {
+    loadDevices();
+    startStatusUpdates();
+    restoreButtonState();
+    updateButtonColor();
+});
 
 async function switchCamera() {
     const select = document.getElementById('cameraSelect');

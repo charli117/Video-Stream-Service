@@ -15,12 +15,13 @@
             <div class="camera-select">
                 <div class="select-wrapper">
                     <select id="cameraSelect"><option value="">Loading cameras...</option></select>
+                    <select id="audioSelect"><option value="">Loading audio devices...</option></select>
                 </div>
                 <div class="button-group">
-                    <button id="switchButton" onclick="switchCamera()" disabled>
-                        <i class="fas fa-camera"></i> Switch Camera
+                    <button id="switchButton" onclick="switchDevices()" disabled>
+                        <i class="fas fa-exchange-alt"></i> Switch
                     </button>
-                    <button id="refreshButton" onclick="loadCameras()">
+                    <button id="refreshButton" onclick="loadDevices()">
                         <i class="fas fa-sync"></i> Refresh List
                     </button>
                     <button id="analysisToggle" onclick="toggleAnalysis()">

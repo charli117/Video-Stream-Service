@@ -4,13 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="c7800c4b-088e-4c62-8313-176bf30b8a3d" name="更改" comment="feat: 增加帧变化日志及图片查看功能">
+    <list default="true" id="c7800c4b-088e-4c62-8313-176bf30b8a3d" name="更改" comment="feat: 增加音频分析及变化记录功能">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/__init__.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/analyzer.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/analyzer.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/routes.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/routes.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/config.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/static/css/style.css" beforeDir="false" afterPath="$PROJECT_DIR$/static/css/style.css" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/static/js/main.js" beforeDir="false" afterPath="$PROJECT_DIR$/static/js/main.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/templates/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/index.html" afterDir="false" />
     </list>
@@ -109,7 +107,7 @@
       <updated>1738672999248</updated>
       <workItem from="1738673000504" duration="115000" />
       <workItem from="1738673138234" duration="13668000" />
-      <workItem from="1738716159262" duration="19474000" />
+      <workItem from="1738716159262" duration="23067000" />
     </task>
     <task id="LOCAL-00001" summary="feat: 初始化项目结构并添加视频分析功能">
       <option name="closed" value="true" />
@@ -231,7 +229,15 @@
       <option name="project" value="LOCAL" />
       <updated>1738740394298</updated>
     </task>
-    <option name="localTasksCounter" value="16" />
+    <task id="LOCAL-00016" summary="feat: 增加音频分析及变化记录功能">
+      <option name="closed" value="true" />
+      <created>1738748383276</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1738748383276</updated>
+    </task>
+    <option name="localTasksCounter" value="17" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -262,7 +268,8 @@
     <MESSAGE value="feat: 增加摄像头设备名称获取与显示功能" />
     <MESSAGE value="feat: 增加分析开关及摄像头设备名称显示" />
     <MESSAGE value="feat: 增加帧变化日志及图片查看功能" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat: 增加帧变化日志及图片查看功能" />
+    <MESSAGE value="feat: 增加音频分析及变化记录功能" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: 增加音频分析及变化记录功能" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -276,6 +283,6 @@
     </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/Video_Stream_Service$run.coverage" NAME="run 覆盖结果" MODIFIED="1738748107818" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/Video_Stream_Service$run.coverage" NAME="run 覆盖结果" MODIFIED="1738751444376" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
 </project>
