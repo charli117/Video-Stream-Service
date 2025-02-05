@@ -83,6 +83,38 @@ class BaseAnalyzer:
         except Exception as e:
             self.logger.error(f"Error cleaning up old files: {str(e)}")
 
+    def toggle_analysis(self, enabled):
+        """切换分析状态"""
+        with self._status_lock:
+            try:
+                # 检查状态是否真的需要改变
+                if self.analysis_enabled == enabled:
+                    return True
+                    
+                # 检查运行状态
+                if not self.is_running and enabled:
+                    self.logger.warning("Cannot enable analysis when analyzer is not running")
+                    return False
+    
+                previous_state = self.analysis_enabled
+                self.analysis_enabled = enabled
+                self.logger.info(f"Analysis state changed: {previous_state} -> {enabled}")
+    
+                # 添加队列清理
+                if not enabled:
+                    self._clear_queues()
+    
+                # 添加更详细的状态日志
+                if enabled:
+                    self.logger.info("Analysis started - now monitoring for changes")
+                else:
+                    self.logger.info("Analysis stopped - no longer monitoring for changes")
+    
+                return True
+            except Exception as e:
+                self.logger.error(f"Error toggling analysis: {str(e)}")
+                return False
+
     def _clear_queues(self):
         """清空所有队列"""
         for queue in [self.frame_queue, self.change_queue, self.processed_frames]:
@@ -127,6 +159,29 @@ class BaseAnalyzer:
 
         except Exception as e:
             self.logger.error(f"Error saving image: {str(e)}")
+            return None
+
+    def _save_audio_file(self, audio_data):
+        """保存音频文件"""
+        try:
+            # 确保保存目录存在
+            os.makedirs(self.output_dir, exist_ok=True)
+
+            # 生成文件名
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+            filename = f'audio_{timestamp}.wav'
+            filepath = os.path.join(self.output_dir, filename)
+
+            # 保存音频
+            sf.write(filepath, audio_data, InitialConfig.AUDIO_SAMPLE_RATE)
+
+            return {
+                'filepath': filepath,
+                'audio_data': audio_data
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error saving audio: {str(e)}")
             return None
 
     # def llm_loop(self):
@@ -236,52 +291,6 @@ class BaseAnalyzer:
 
         except Exception as e:
             self.logger.error(f"Error in LLM analysis: {str(e)}")
-
-    def _save_audio_file(self, audio_data):
-        """保存音频文件"""
-        try:
-            # 确保保存目录存在
-            os.makedirs(self.output_dir, exist_ok=True)
-
-            # 生成文件名
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-            filename = f'audio_{timestamp}.wav'
-            filepath = os.path.join(self.output_dir, filename)
-
-            # 保存音频
-            sf.write(filepath, audio_data, InitialConfig.AUDIO_SAMPLE_RATE)
-
-            return {
-                'filepath': filepath,
-                'audio_data': audio_data
-            }
-
-        except Exception as e:
-            self.logger.error(f"Error saving audio: {str(e)}")
-            return None
-
-    def toggle_analysis(self, enabled):
-        """切换分析状态"""
-        with self._status_lock:
-            try:
-                previous_state = self.analysis_enabled
-                self.analysis_enabled = enabled
-                self.logger.info(f"Analysis state changed: {previous_state} -> {enabled}")
-
-                # 添加队列清理
-                if not enabled:
-                    self._clear_queues()
-
-                # 添加更详细的状态日志
-                if enabled:
-                    self.logger.info("Analysis started - now monitoring for changes")
-                else:
-                    self.logger.info("Analysis stopped - no longer monitoring for changes")
-
-                return True
-            except Exception as e:
-                self.logger.error(f"Error toggling analysis: {str(e)}")
-                return False
 
     def _llm_loop(self):
         """LLM处理循环"""
@@ -429,7 +438,7 @@ class VideoAnalyzer(BaseAnalyzer):
                                 self.logger.info("Significant frame change detected")
                                 change_frames.append(processed_frame.copy())
 
-                                if len(change_frames) >= 5:
+                                if len(change_frames) >= InitialConfig.CHANGE_FRAME_THRESHOLD:
                                     concat_frame = process_change_frames(change_frames)
                                     if concat_frame is not None:
                                         if self.change_queue.full():
@@ -504,22 +513,31 @@ class AudioAnalyzer(BaseAnalyzer):
         self.chunk_size = InitialConfig.AUDIO_CHUNK_SIZE
         self.threshold = InitialConfig.AUDIO_CHANGE_THRESHOLD
         self.microphone = Microphone()
-
-    @staticmethod
-    def list_devices():
-        """列出所有可用音频输入设备"""
-        return Microphone.list_devices()
-
+        self.current_device = None  # 添加当前设备属性
+        
     def switch_audio(self, device_index):
         """切换音频输入设备"""
         try:
             self.stop()
             time.sleep(0.5)
             self.microphone.start(device_index)
+            self.current_device = device_index  # 更新当前设备索引
             return True
         except Exception as e:
             self.logger.error(f"Error switching audio device: {str(e)}")
             return False
+            
+    def generate_audio(self):
+        """生成音频流"""
+        while self.is_running:
+            try:
+                audio_data = self.microphone.read()
+                if audio_data is not None:
+                    if not self.audio_queue.full() and self.analysis_enabled:
+                        self.audio_queue.put(audio_data.copy())
+            except Exception as e:
+                self.logger.error(f"Error generating audio: {str(e)}")
+            time.sleep(0.01)
 
     def start(self):
         """启动音频分析器"""
@@ -527,13 +545,27 @@ class AudioAnalyzer(BaseAnalyzer):
             return
 
         try:
+            # 如果没有设置当前设备，使用默认设备
+            if self.current_device is None:
+                available_devices = self.microphone.list_devices()
+                if available_devices:
+                    self.current_device = available_devices[0]['index']
+                else:
+                    raise RuntimeError("No audio devices available")
+
             # 初始化并启动音频设备
-            self.microphone.start()
+            self.microphone.start(self.current_device)
+
+            # 启动音频采集线程
+            self._audio_thread = Thread(target=self.generate_audio, name="AudioCaptureThread")
+            self._audio_thread.daemon = True
+            self._audio_thread.start()
+            self.logger.info("Audio capture thread started")
 
             # 启动父类的线程管理机制
             super().start()
 
-            self.logger.info("AudioAnalyzer started successfully")
+            self.logger.info(f"AudioAnalyzer started successfully with device {self.current_device}")
 
         except Exception as e:
             self.is_running = False
@@ -545,6 +577,9 @@ class AudioAnalyzer(BaseAnalyzer):
         if not self.is_running:
             return
 
+        self.is_running = False
+        if hasattr(self, '_audio_thread'):
+            self._audio_thread.join(timeout=1.0)
         self.microphone.release()
         super().stop()
             
@@ -555,7 +590,7 @@ class AudioAnalyzer(BaseAnalyzer):
             try:
                 if not self.audio_queue.empty() and self.analysis_enabled:
                     audio_data = self.audio_queue.get()
-                    
+
                     if self.last_audio is not None:
                         if self._detect_audio_change(audio_data):
                             self.logger.info("Significant audio change detected")

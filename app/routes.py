@@ -3,7 +3,6 @@ import os
 from flask import Blueprint, render_template, Response, jsonify, request
 from app import video_analyzer, audio_analyzer
 from app.camera import Camera
-from app.analyzer import AudioAnalyzer
 from app.microphone import Microphone
 
 # 创建蓝图
@@ -33,7 +32,7 @@ def list_devices():
     """获取可用设备列表"""
     try:
         cameras = Camera.list_cameras()
-        audio_devices = AudioAnalyzer.list_devices()
+        audio_devices = Microphone.list_devices()
 
         return jsonify({
             'cameras': cameras,

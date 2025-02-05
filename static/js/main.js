@@ -273,11 +273,19 @@ function playAudioSegment(audioUrl) {
 }
 
 // 定期更新状态
+let statusUpdateInterval = null;
+
 function startStatusUpdates() {
+    // 如果已经存在定时器，先清除
+    if (statusUpdateInterval) {
+        clearInterval(statusUpdateInterval);
+    }
+    
     // 立即更新一次
     updateStatus().then();
-    // 更频繁地更新状态（每200ms一次）以便及时显示帧变化
-    setInterval(updateStatus, 200);
+    
+    // 设置新的定时器
+    statusUpdateInterval = setInterval(updateStatus, 500);
 }
 
 // 页面加载完成后启动状态更新
@@ -288,30 +296,49 @@ document.addEventListener('DOMContentLoaded', () => {
     updateButtonColor();
 });
 
+// 只保留这一个事件监听器
+document.addEventListener('DOMContentLoaded', () => {
+    loadDevices();  // 使用新的 loadDevices 替换 loadCameras
+    startStatusUpdates();
+    restoreButtonState();
+    updateButtonColor();
+});
+
+// 添加防抖函数
+let toggleAnalysisTimeout;
+
 function toggleAnalysis() {
     const analysisToggle = document.getElementById('analysisToggle');
     const isEnabled = analysisToggle.textContent === 'Open Analysis';
-
-    fetch('/api/toggle_analysis', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ enabled: isEnabled })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            analysisToggle.textContent = data.analysis_enabled ? 'Close Analysis' : 'Open Analysis';
-            updateButtonColor();
-            saveButtonState();
-        } else {
-            showError('Failed to toggle analysis');
-        }
-    })
-    .catch(error => {
-        showError('Error toggling analysis: ' + error.message);
-    });
+    
+    // 清除之前的定时器
+    if (toggleAnalysisTimeout) {
+        clearTimeout(toggleAnalysisTimeout);
+    }
+    
+    // 设置新的定时器
+    toggleAnalysisTimeout = setTimeout(() => {
+        fetch('/api/toggle_analysis', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ enabled: isEnabled })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                analysisToggle.textContent = data.analysis_enabled ? 'Close Analysis' : 'Open Analysis';
+                updateButtonColor();
+                saveButtonState();
+            } else {
+                showError('Failed to toggle analysis');
+            }
+        })
+        .catch(error => {
+            showError('Error toggling analysis: ' + error.message);
+        });
+    }, 300); // 300ms 的防抖延迟
 }
 
 // 更新按钮颜色的函数
@@ -349,6 +376,18 @@ async function updateStatus() {
         }
         const status = await response.json();
 
+        // 更新分析按钮状态时增加判断
+        const analysisToggle = document.getElementById('analysisToggle');
+        if (analysisToggle) {
+            const currentState = analysisToggle.textContent === 'Close Analysis';
+            // 只在状态确实发生变化时才更新
+            if (currentState !== status.analysis_enabled) {
+                analysisToggle.textContent = status.analysis_enabled ? 'Close Analysis' : 'Open Analysis';
+                updateButtonColor();
+                saveButtonState();
+            }
+        }
+
         // 更新帧变化历史记录
         if (status.frame_changes && status.frame_changes.length > 0) {
             status.frame_changes.forEach(change => {
@@ -373,7 +412,6 @@ async function updateStatus() {
 
         // 更新状态显示
         const statusDiv = document.getElementById('status');
-        const analysisToggle = document.getElementById('analysisToggle');
 
         if (status.error) {
             statusDiv.innerHTML = `

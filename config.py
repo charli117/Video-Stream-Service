@@ -12,6 +12,7 @@ class InitialConfig:
     DEFAULT_FPS = 30
     MAX_DISPLAY_HEIGHT = 720
     MAX_SAVED_IMAGES = 1000
+    CHANGE_FRAME_THRESHOLD = 6
 
     # Audio Configuration
     AUDIO_SAMPLE_RATE = 44100
