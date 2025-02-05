@@ -4,7 +4,6 @@ import cv2
 import logging
 import threading
 import base64
-import sounddevice as sd
 import soundfile as sf
 import numpy as np
 
@@ -14,6 +13,7 @@ from queue import Queue
 from collections import deque
 
 from app.camera import Camera
+from app.microphone import Microphone
 from config import InitialConfig
 from logging.handlers import RotatingFileHandler
 import librosa.feature as librosa_feature
@@ -92,7 +92,7 @@ class BaseAnalyzer:
                 except:
                     pass
 
-    def save_base64_image(self, image):
+    def _save_base64_image(self, image):
         """
         将图像保存为文件
 
@@ -223,7 +223,7 @@ class BaseAnalyzer:
 
             # 保存数据
             if isinstance(data, np.ndarray):
-                result = self.save_base64_image(data)
+                result = self._save_base64_image(data)
             else:
                 result = self._save_audio_file(data)
 
@@ -421,8 +421,7 @@ class VideoAnalyzer(BaseAnalyzer):
             try:
                 if not self.frame_queue.empty() and self.analysis_enabled:
                     frame = self.frame_queue.get()
-                    # processed_frame = self._preprocess_frame(frame)
-                    processed_frame = frame
+                    processed_frame = self._preprocess_frame(frame)
 
                     if processed_frame is not None and len(processed_frame.shape) == 3:
                         if self.last_frame is not None:
@@ -496,100 +495,46 @@ class VideoAnalyzer(BaseAnalyzer):
 
 
 class AudioAnalyzer(BaseAnalyzer):
-    _device_names = {}  # 类变量，用于存储设备名称映射
-    
     def __init__(self):
         super().__init__()
-        # 添加 logger 初始化
         self.logger = logging.getLogger('AudioAnalyzer')
-        self.current_device = 0
         self.audio_queue = Queue(maxsize=10)
         self.last_audio = None
         self.sample_rate = InitialConfig.AUDIO_SAMPLE_RATE
         self.chunk_size = InitialConfig.AUDIO_CHUNK_SIZE
         self.threshold = InitialConfig.AUDIO_CHANGE_THRESHOLD
-        self.stream = None
-        
-    @classmethod
-    def update_device_names(cls, device_names):
-        """更新设备名称映射"""
-        cls._device_names = device_names
-        
+        self.microphone = Microphone()
+
     @staticmethod
     def list_devices():
         """列出所有可用音频输入设备"""
-        try:
-            devices = sd.query_devices()
-            available_devices = []
-            
-            for i, device in enumerate(devices):
-                if device['max_input_channels'] > 0:
-                    info = {
-                        'index': i,
-                        'name': AudioAnalyzer._device_names.get(str(i), device['name']),
-                        'channels': device['max_input_channels'],
-                        'sample_rate': device['default_samplerate']
-                    }
-                    available_devices.append(info)
-                    
-            return available_devices
-        except Exception as e:
-            logging.error(f"Error listing audio devices: {str(e)}")
-            return []
-            
-    def switch_device(self, device_index):
+        return Microphone.list_devices()
+
+    def switch_audio(self, device_index):
         """切换音频输入设备"""
         try:
             self.stop()
             time.sleep(0.5)
-            self.current_device = device_index
-            self.start()
+            self.microphone.start(device_index)
             return True
         except Exception as e:
             self.logger.error(f"Error switching audio device: {str(e)}")
             return False
-            
+
     def start(self):
         """启动音频分析器"""
         if self.is_running:
             return
-        
+
         try:
-            # 验证当前设备是否可用
-            devices = sd.query_devices()
-            if self.current_device >= len(devices):
-                raise ValueError(f"Invalid device index: {self.current_device}")
-                
-            device_info = devices[self.current_device]
-            if device_info['max_input_channels'] <= 0:
-                raise ValueError(f"Device {self.current_device} has no input channels")
-                
-            # 使用设备实际支持的参数
-            channels = min(device_info['max_input_channels'], InitialConfig.AUDIO_CHANNELS)
-            sample_rate = int(device_info['default_samplerate'])
-            
-            # 更新实例的采样率为设备实际支持的值
-            self.sample_rate = sample_rate
-            
-            self.logger.info(f"Initializing audio device {self.current_device} "
-                            f"({device_info['name']}) with {channels} channels "
-                            f"at {sample_rate}Hz")
-            
-            # 先启动父类的线程管理机制
+            # 初始化并启动音频设备
+            self.microphone.start()
+
+            # 启动父类的线程管理机制
             super().start()
-            
-            # 初始化并启动音频流
-            self.stream = sd.InputStream(
-                device=self.current_device,
-                channels=channels,
-                samplerate=sample_rate,
-                callback=self._audio_callback,
-                blocksize=self.chunk_size
-            )
-            self.stream.start()
-            
+
             self.logger.info("AudioAnalyzer started successfully")
-            
+
         except Exception as e:
             self.is_running = False
             self.logger.error(f"Failed to start audio analyzer: {str(e)}")
@@ -600,22 +545,12 @@ class AudioAnalyzer(BaseAnalyzer):
         if not self.is_running:
             return
 
-        if hasattr(self, 'stream') and self.stream is not None:
-            self.stream.stop()
-            self.stream.close()
+        self.microphone.release()
         super().stop()
-            
-    def _audio_callback(self, indata, frames, time, status):
-        """音频回调函数"""
-        if status:
-            self.logger.warning(f"Audio callback status: {status}")
-        if self.is_running and not self.audio_queue.full() and self.analysis_enabled:
-            # 确保数据是正确的格式
-            if isinstance(indata, np.ndarray):
-                self.audio_queue.put(indata.copy())
             
     def _analyze_loop(self):
         """音频分析循环"""
+        change_segments = []
         while self.is_running:
             try:
                 if not self.audio_queue.empty() and self.analysis_enabled:
@@ -624,7 +559,17 @@ class AudioAnalyzer(BaseAnalyzer):
                     if self.last_audio is not None:
                         if self._detect_audio_change(audio_data):
                             self.logger.info("Significant audio change detected")
-                            self._save_audio_change(audio_data)
+                            change_segments.append(audio_data.copy())
+                            
+                            if len(change_segments) >= 5:
+                                # 直接发送最新的音频片段到 change_queue
+                                if self.change_queue.full():
+                                    try:
+                                        self.change_queue.get_nowait()
+                                    except:
+                                        pass
+                                self.change_queue.put(change_segments[-1])
+                                change_segments = []
                     
                     self.last_audio = audio_data.copy()
                     
@@ -658,23 +603,3 @@ class AudioAnalyzer(BaseAnalyzer):
         except Exception as e:
             self.logger.error(f"Error in audio change detection: {str(e)}")
             return False
-            
-    def _save_audio_change(self, audio_data):
-        """Save detected audio changes"""
-        try:
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-            filename = f'audio_change_{timestamp}.wav'
-            filepath = os.path.join(self.output_dir, filename)
-            
-            # Ensure output directory exists
-            os.makedirs(self.output_dir, exist_ok=True)
-            
-            # Save audio file
-            sf.write(filepath, audio_data, self.sample_rate)
-            self.logger.info(f"Audio change saved: {filepath}")
-            
-            # Process with LLM
-            self._llm_analyze(audio_data)
-            
-        except Exception as e:
-            self.logger.error(f"Failed to save audio change: {str(e)}")

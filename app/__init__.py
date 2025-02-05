@@ -3,6 +3,7 @@ import logging
 from flask import Flask
 from config import InitialConfig
 from app.analyzer import VideoAnalyzer, AudioAnalyzer
+from app.camera import Camera
 
 # 配置日志
 logging.basicConfig(level=InitialConfig.LOG_LEVEL, format=InitialConfig.LOG_FORMAT)

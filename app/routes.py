@@ -4,6 +4,7 @@ from flask import Blueprint, render_template, Response, jsonify, request
 from app import video_analyzer, audio_analyzer
 from app.camera import Camera
 from app.analyzer import AudioAnalyzer
+from app.microphone import Microphone
 
 # 创建蓝图
 main_bp = Blueprint('main', __name__)
@@ -67,7 +68,7 @@ def switch_devices():
             }), 400
 
         camera_success = video_analyzer.switch_camera(camera_index)
-        audio_success = audio_analyzer.switch_device(audio_index)
+        audio_success = audio_analyzer.switch_audio(audio_index)
 
         if not camera_success or not audio_success:
             return jsonify({
@@ -87,11 +88,11 @@ def update_device_names():
         data = request.get_json()
         device_names = data.get('deviceNames', {})
         audio_device_names = data.get('audioDeviceNames', {})
-
+        
         # 更新摄像头和音频设备名称映射
         Camera.update_device_names(device_names)
-        AudioAnalyzer.update_device_names(audio_device_names)
-
+        Microphone.update_device_names(audio_device_names)
+        
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
@@ -109,8 +110,7 @@ def get_status():
             'current_camera': video_analyzer.video_source,
             'current_camera_name': Camera.get_device_name(current_camera_index),
             'current_audio_device': audio_analyzer.current_device,
-            'current_audio_name': AudioAnalyzer._device_names.get(current_audio_index,
-                                                                  f'Audio Device {current_audio_index}'),
+            'current_audio_name': Microphone.get_device_name(current_audio_index),
             'fps': video_analyzer.fps,
             'camera_info': {},
             'analysis_enabled': video_analyzer.analysis_enabled,
