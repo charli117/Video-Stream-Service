@@ -151,11 +151,12 @@ function startStatusUpdates() {
 document.addEventListener('DOMContentLoaded', () => {
     loadCameras();
     startStatusUpdates();
-    restoreButtonState();
+    restoreButtonState();  // 添加这一行
 });
 
 function toggleAnalysis() {
     const analysisToggle = document.getElementById('analysisToggle');
+    // 修改判断逻辑，根据当前按钮文本来确定要切换的状态
     const isEnabled = analysisToggle.textContent === 'Open Analysis';
 
     fetch('/toggle_analysis', {
@@ -168,8 +169,11 @@ function toggleAnalysis() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            // 根据服务器返回的状态更新按钮文本
             analysisToggle.textContent = data.analysis_enabled ? 'Close Analysis' : 'Open Analysis';
+            // 更新按钮颜色
             updateButtonColor();
+            // 保存状态到 localStorage
             saveButtonState();
         } else {
             showError('Failed to toggle analysis');
@@ -180,6 +184,7 @@ function toggleAnalysis() {
     });
 }
 
+// 更新按钮颜色的函数
 function updateButtonColor() {
     const analysisToggle = document.getElementById('analysisToggle');
     if (analysisToggle.textContent === 'Close Analysis') {
@@ -189,11 +194,13 @@ function updateButtonColor() {
     }
 }
 
+// 保存按钮状态到 localStorage
 function saveButtonState() {
     const analysisToggle = document.getElementById('analysisToggle');
     localStorage.setItem('analysisToggleState', analysisToggle.textContent);
 }
 
+// 恢复按钮状态
 function restoreButtonState() {
     const analysisToggle = document.getElementById('analysisToggle');
     const savedState = localStorage.getItem('analysisToggleState');
