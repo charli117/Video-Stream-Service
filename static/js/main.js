@@ -151,6 +151,7 @@ function startStatusUpdates() {
 document.addEventListener('DOMContentLoaded', () => {
     loadCameras();
     startStatusUpdates();
+    restoreButtonState();
 });
 
 function toggleAnalysis() {
@@ -168,6 +169,8 @@ function toggleAnalysis() {
     .then(data => {
         if (data.success) {
             analysisToggle.textContent = data.analysis_enabled ? 'Close Analysis' : 'Open Analysis';
+            updateButtonColor();
+            saveButtonState();
         } else {
             showError('Failed to toggle analysis');
         }
@@ -175,4 +178,27 @@ function toggleAnalysis() {
     .catch(error => {
         showError('Error toggling analysis: ' + error.message);
     });
+}
+
+function updateButtonColor() {
+    const analysisToggle = document.getElementById('analysisToggle');
+    if (analysisToggle.textContent === 'Close Analysis') {
+        analysisToggle.style.backgroundColor = 'red';
+    } else {
+        analysisToggle.style.backgroundColor = '';
+    }
+}
+
+function saveButtonState() {
+    const analysisToggle = document.getElementById('analysisToggle');
+    localStorage.setItem('analysisToggleState', analysisToggle.textContent);
+}
+
+function restoreButtonState() {
+    const analysisToggle = document.getElementById('analysisToggle');
+    const savedState = localStorage.getItem('analysisToggleState');
+    if (savedState) {
+        analysisToggle.textContent = savedState;
+        updateButtonColor();
+    }
 }
