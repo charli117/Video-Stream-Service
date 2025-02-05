@@ -9,7 +9,7 @@ async function loadCameras() {
         refreshButton.disabled = true;
         switchButton.disabled = true;
 
-        const response = await fetch("{{ url_for('main.list_cameras') }}");
+        const response = await fetch("/api/cameras");
         const data = await response.json();
 
         const select = document.getElementById('cameraSelect');
@@ -58,7 +58,7 @@ async function switchCamera() {
         document.getElementById('switchButton').disabled = true;
         document.getElementById('refreshButton').disabled = true;
 
-        const response = await fetch("{{ url_for('main.switch_camera') }}", {
+        const response = await fetch("/api/camera/switch", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -76,7 +76,7 @@ async function switchCamera() {
 
         // 刷新视频源
         const videoFeed = document.getElementById('videoFeed');
-        videoFeed.src = "{{ url_for('main.video_feed') }}?" + new Date().getTime();
+        videoFeed.src = "/video_feed?" + new Date().getTime();
 
         hideError();
 
@@ -101,7 +101,7 @@ function hideError() {
 
 async function updateStatus() {
     try {
-        const response = await fetch("{{ url_for('main.get_status') }}");
+        const response = await fetch("/api/status");
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -153,30 +153,26 @@ document.addEventListener('DOMContentLoaded', () => {
     startStatusUpdates();
 });
 
-// 添加样式
-const style = document.createElement('style');
-style.textContent = `
-    .status {
-        margin: 20px;
-        padding: 15px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        background-color: #f9f9f9;
-    }
+function toggleAnalysis() {
+    const analysisToggle = document.getElementById('analysisToggle');
+    const isEnabled = analysisToggle.textContent === 'Open Analysis';
 
-    .status p {
-        margin: 5px 0;
-        font-size: 14px;
-    }
-
-    .status .error {
-        color: #dc3545;
-        font-weight: bold;
-    }
-
-    .status .warning {
-        color: #ffc107;
-        font-weight: bold;
-    }
-`;
-document.head.appendChild(style);
+    fetch('/toggle_analysis', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ enabled: isEnabled })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            analysisToggle.textContent = isEnabled ? 'Close Analysis' : 'Open Analysis';
+        } else {
+            showError('Failed to toggle analysis');
+        }
+    })
+    .catch(error => {
+        showError('Error toggling analysis: ' + error.message);
+    });
+}
