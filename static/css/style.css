@@ -1,79 +1,198 @@
 /* 添加Font Awesome图标支持 */
 @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css');
 
+/* 全局样式 */
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Roboto', sans-serif;
+    background-color: #f0f2f5;
+    color: #333;
+}
+
 .container {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    min-height: 100vh;
     padding: 20px;
 }
-.controls {
-    margin: 20px;
-    padding: 15px;
-    background-color: #f5f5f5;
-    border-radius: 5px;
-    width: 80%;
-    max-width: 660px;
+
+/* 头部样式 */
+.header {
+    text-align: center;
+    padding: 20px 0;
+    margin-bottom: 30px;
+    background: linear-gradient(135deg, #1e88e5, #1565c0);
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
+
+.header h1 {
+    color: white;
+    margin: 0;
+    font-size: 24px;
+    font-weight: 500;
+}
+
+/* 控制区域样式 */
+.controls {
+    background-color: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+    width: 90%;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
 .camera-select {
     display: flex;
-    gap: 10px;
+    flex-wrap: wrap;
+    gap: 15px;
     align-items: center;
-    margin-bottom: 15px;
 }
+
+.select-wrapper {
+    flex: 1;
+    min-width: 250px;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
 select {
-    padding: 5px;
-    font-size: 16px;
-    min-width: 200px;
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    background-color: white;
 }
+
 button {
-    padding: 8px 15px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
     background-color: #4CAF50;
     color: white;
-    border: none;
-    border-radius: 4px;
     cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
 }
+
 button:hover {
     background-color: #45a049;
+    transform: translateY(-1px);
 }
+
 button:disabled {
     background-color: #cccccc;
     cursor: not-allowed;
+    transform: none;
 }
-.status {
-    margin: 20px;
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 5px;
+
+button i {
+    font-size: 14px;
 }
-.video-container {
-    margin: 20px;
-    max-width: 100%;
-    overflow: hidden;
+
+/* 主要内容区域 */
+.main-content {
     display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
     justify-content: center;
-    align-items: center;
+    width: 90%;
+    max-width: 1200px;
+    margin: 0 auto;
 }
+
+.video-container {
+    flex: 1;
+    min-width: 300px;
+    background-color: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
 .video-container img {
-    max-width: 100%;
+    width: 100%;
     height: auto;
-    object-fit: contain;
+    border-radius: 6px;
 }
+
+/* 状态面板 */
+.status-panel {
+    width: 300px;
+    background-color: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.status-panel h2 {
+    margin: 0 0 20px 0;
+    font-size: 18px;
+    color: #333;
+}
+
+.status {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.status p {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #666;
+}
+
+.status i {
+    color: #4CAF50;
+    font-size: 14px;
+}
+
+/* 错误提示 */
 .error {
-    color: red;
-    margin: 10px 0;
+    color: #d32f2f;
+    background-color: #ffebee;
+    padding: 10px 15px;
+    border-radius: 6px;
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
-#refreshButton {
-    margin-left: 10px;
-    padding: 8px 15px;
-    background-color: #4CAF50;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
+
+.error::before {
+    content: '\f071';
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 900;
 }
-#refreshButton:disabled {
-    background-color: #cccccc;
-    cursor: not-allowed;
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .camera-select {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .button-group {
+        justify-content: center;
+    }
+
+    .status-panel {
+        width: 100%;
+    }
 }

@@ -3,30 +3,48 @@
 <head>
     <title>CVTE RES Screen Display Anomaly Analysis</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
-        <h1>CVTE RES Screen Display Anomaly Analysis</h1>
+        <header class="header">
+            <h1>CVTE RES Screen Display Anomaly Analysis</h1>
+        </header>
 
         <div class="controls">
             <div class="camera-select">
-                <select id="cameraSelect"><option value="">Loading cameras...</option></select>
-                <button id="switchButton" onclick="switchCamera()" disabled>Switch Camera</button>
-                <button id="refreshButton" onclick="loadCameras()"><i class="fas fa-sync"></i> Refresh List</button>
-                <button id="analysisToggle" onclick="toggleAnalysis()">Open Analysis</button>
+                <div class="select-wrapper">
+                    <select id="cameraSelect"><option value="">Loading cameras...</option></select>
+                </div>
+                <div class="button-group">
+                    <button id="switchButton" onclick="switchCamera()" disabled>
+                        <i class="fas fa-camera"></i> Switch Camera
+                    </button>
+                    <button id="refreshButton" onclick="loadCameras()">
+                        <i class="fas fa-sync"></i> Refresh List
+                    </button>
+                    <button id="analysisToggle" onclick="toggleAnalysis()">
+                        <i class="fas fa-play"></i> Open Analysis
+                    </button>
+                </div>
             </div>
             <div id="error" class="error" style="display: none;"></div>
         </div>
 
-        <div class="video-container">
-            <img id="videoFeed" src="{{ url_for('main.video_feed') }}" alt="Video Feed">
-        </div>
+        <div class="main-content">
+            <div class="video-container">
+                <img id="videoFeed" src="{{ url_for('main.video_feed') }}" alt="Video Feed">
+            </div>
 
-        <div class="status" id="status">
-            <p>Status: Loading...</p>
-            <p>Camera: Loading...</p>
-            <p>Resolution: Loading...</p>
-            <p>FPS: Loading...</p>
+            <div class="status-panel">
+                <h2>System Status</h2>
+                <div class="status" id="status">
+                    <p><i class="fas fa-circle"></i> Status: Loading...</p>
+                    <p><i class="fas fa-camera"></i> Camera: Loading...</p>
+                    <p><i class="fas fa-expand"></i> Resolution: Loading...</p>
+                    <p><i class="fas fa-tachometer-alt"></i> FPS: Loading...</p>
+                </div>
+            </div>
         </div>
     </div>
 
