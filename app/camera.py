@@ -330,7 +330,8 @@ class StreamCamera:
                 for frame in self.process_stream(self.video_container, self.video_stream):
                     if isinstance(frame, av.VideoFrame):
                         img = frame.to_ndarray(format='bgr24')
-                        cv2.imshow('RTMP Stream', img)
+                        if InitialConfig.CAMERA_TYPE != 'stream':
+                            cv2.imshow('RTMP Stream', img)
 
                         if cv2.waitKey(1) & 0xFF == ord('q'):
                             self.is_running = False
