@@ -639,3 +639,15 @@ class AudioAnalyzer(BaseAnalyzer):
         except Exception as e:
             self.logger.error(f"Error in audio change detection: {str(e)}")
             return False
+
+    def integrate_stream_audio_processing(self, stream_camera):
+        """Integrate audio processing with StreamCamera"""
+        try:
+            if not isinstance(stream_camera, Camera):
+                raise ValueError("Invalid stream camera instance")
+
+            stream_camera.audio_processing_loop = self._analyze_loop
+            self.logger.info("Integrated audio processing with StreamCamera")
+
+        except Exception as e:
+            self.logger.error(f"Error integrating audio processing: {str(e)}")

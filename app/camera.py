@@ -13,6 +13,63 @@ from config import InitialConfig
 class Camera:
     def __init__(self):
         self.logger = logging.getLogger('Camera')
+        self.camera = None
+
+    def start(self, source=0):
+        if InitialConfig.CAMERA_TYPE == 'local':
+            self.camera = LocalCamera()
+        elif InitialConfig.CAMERA_TYPE == 'stream':
+            self.camera = StreamCamera()
+        else:
+            raise ValueError("Invalid CAMERA_TYPE in configuration")
+
+        self.camera.start(source)
+
+    def read(self):
+        if self.camera is None:
+            return False, None
+        return self.camera.read()
+
+    def release(self):
+        if self.camera is not None:
+            self.camera.release()
+            self.camera = None
+
+    @staticmethod
+    def list_cameras():
+        if InitialConfig.CAMERA_TYPE == 'local':
+            return LocalCamera.list_cameras()
+        elif InitialConfig.CAMERA_TYPE == 'stream':
+            return StreamCamera.list_cameras()
+        else:
+            raise ValueError("Invalid CAMERA_TYPE in configuration")
+
+    @staticmethod
+    def is_valid_camera(index):
+        if InitialConfig.CAMERA_TYPE == 'local':
+            return LocalCamera.is_valid_camera(index)
+        elif InitialConfig.CAMERA_TYPE == 'stream':
+            return StreamCamera.is_valid_camera(index)
+        else:
+            raise ValueError("Invalid CAMERA_TYPE in configuration")
+
+    @staticmethod
+    def get_device_name(index):
+        if InitialConfig.CAMERA_TYPE == 'local':
+            return LocalCamera.get_device_name(index)
+        elif InitialConfig.CAMERA_TYPE == 'stream':
+            return StreamCamera.get_device_name(index)
+        else:
+            raise ValueError("Invalid CAMERA_TYPE in configuration")
+
+    @staticmethod
+    def update_device_names(device_names):
+        if InitialConfig.CAMERA_TYPE == 'local':
+            LocalCamera.update_device_names(device_names)
+        elif InitialConfig.CAMERA_TYPE == 'stream':
+            StreamCamera.update_device_names(device_names)
+        else:
+            raise ValueError("Invalid CAMERA_TYPE in configuration")
 
 
 class LocalCamera:
@@ -164,6 +221,8 @@ class LocalCamera:
 
 
 class StreamCamera:
+    _device_names = {}  # 类变量，用于存储设备名称映射
+
     def __init__(self):
         self.is_running = False
         self.video_container = None
@@ -171,6 +230,33 @@ class StreamCamera:
         self.audio_stream = None
         self.video_stream = None
         self.audio_thread = None
+        self.is_initialized = False
+
+    @staticmethod
+    def is_valid_camera(index):
+        """公共方法：检查摄像头是否有效"""
+        return True  # Stream cameras are always valid
+
+    @classmethod
+    def get_device_name(cls, index):
+        """公共方法：获取设备名称"""
+        return cls._device_names.get(str(index), f'Stream Camera {index}')
+
+    @classmethod
+    def update_device_names(cls, device_names):
+        """更新设备名称映射"""
+        cls._device_names = device_names
+
+    @staticmethod
+    def list_cameras():
+        """列出所有可用摄像头"""
+        return [{
+            'index': 0,
+            'name': StreamCamera._device_names.get('0', 'Stream Camera 0'),
+            'width': 1920,
+            'height': 1080,
+            'fps': 30
+        }]
 
     @staticmethod
     def get_stream_url() -> Optional[str]:
@@ -201,11 +287,13 @@ class StreamCamera:
         except Exception as e:
             print(f"Stream processing error: {e}")
 
-    def start_stream(self, rtmp_url: str, max_retries: int = 3) -> None:
+    def start(self, source=0):
+        rtmp_url = self.get_stream_url()
         if not rtmp_url:
             raise ValueError("RTMP URL is required")
 
         retry_count = 0
+        max_retries = 3
         while retry_count < max_retries:
             try:
                 # 创建视频容器
@@ -243,7 +331,8 @@ class StreamCamera:
                 for frame in self.process_stream(self.video_container, self.video_stream):
                     if isinstance(frame, av.VideoFrame):
                         img = frame.to_ndarray(format='bgr24')
-                        cv2.imshow('RTMP Stream', img)
+                        if InitialConfig.CAMERA_TYPE != 'stream':
+                            cv2.imshow('RTMP Stream', img)
 
                         if cv2.waitKey(1) & 0xFF == ord('q'):
                             self.is_running = False
@@ -260,6 +349,19 @@ class StreamCamera:
                 break
             finally:
                 self.cleanup()
+
+    def read(self):
+        if not self.is_running or self.video_stream is None:
+            return False, None
+
+        try:
+            for frame in self.process_stream(self.video_container, self.video_stream):
+                if isinstance(frame, av.VideoFrame):
+                    img = frame.to_ndarray(format='bgr24')
+                    return True, img
+        except Exception as e:
+            print(f"Error reading frame: {e}")
+            return False, None
 
     def audio_processing_loop(self):
         """音频处理循环"""
