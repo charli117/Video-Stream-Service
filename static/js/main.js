@@ -309,7 +309,6 @@ async function switchDevices() {
 document.addEventListener('DOMContentLoaded', () => {
     loadDevices();
     startStatusUpdates();
-    restoreButtonState();
     updateButtonColor();
 });
 
