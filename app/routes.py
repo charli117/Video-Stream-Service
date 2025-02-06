@@ -66,8 +66,10 @@ def switch_devices():
                 'error': f'Camera {camera_index} is not available'
             }), 400
 
+        logger.info(f"Switching to camera {camera_index} and audio device {audio_index}")
         camera_success = video_analyzer.switch_camera(camera_index)
         audio_success = audio_analyzer.switch_audio(audio_index)
+        logger.info(f"Camera switch success: {camera_success}, Audio switch success: {audio_success}")
 
         if not camera_success or not audio_success:
             return jsonify({
@@ -77,6 +79,7 @@ def switch_devices():
 
         return jsonify({'success': True})
     except Exception as e:
+        logger.error(f"Error switching devices: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 400
 
 
