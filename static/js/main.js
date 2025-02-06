@@ -169,6 +169,8 @@ async function switchDevices() {
         document.getElementById('switchButton').disabled = true;
         document.getElementById('refreshButton').disabled = true;
 
+        console.log(`Switching to camera ${cameraIndex} and audio device ${audioIndex}`);  // P92f1
+
         const response = await fetch("/api/devices/switch", {
             method: 'POST',
             headers: {
@@ -187,6 +189,8 @@ async function switchDevices() {
 
         currentCamera = cameraIndex;
         currentAudioDevice = audioIndex;
+
+        console.log(`Switched to camera ${cameraIndex} and audio device ${audioIndex}`);  // P92f1
 
         // 刷新视频源
         const videoFeed = document.getElementById('videoFeed');
