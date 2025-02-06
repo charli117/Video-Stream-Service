@@ -117,7 +117,14 @@ async function loadDevices() {
         const audioSelect = document.getElementById('audioSelect');
         
         // 更新摄像头选择
-        cameraSelect.innerHTML = '';
+        // 保存当前选中值
+        const currentCameraValue = cameraSelect.value;
+        
+        // 清空选项但保留第一个默认选项
+        while (cameraSelect.options.length > 1) {
+            cameraSelect.remove(1);
+        }
+        
         if (data.cameras && data.cameras.length > 0) {
             data.cameras.forEach(camera => {
                 const option = document.createElement('option');
@@ -129,10 +136,55 @@ async function loadDevices() {
                 cameraSelect.appendChild(option);
             });
             
-            // 为本地摄像头模式添加change事件监听
+            // 恢复选中值
+            if (currentCameraValue) {
+                cameraSelect.value = currentCameraValue;
+            }
+            
             if (data.controls.includes('cameraSelect') && !data.controls.includes('Switch Devices')) {
                 cameraSelect.onchange = () => switchDevices();
             }
+        }
+
+        // 更新音频设备选择
+        // 保存当前选中值
+        const currentAudioValue = audioSelect.value;
+        
+        // 清空选项但保留第一个默认选项
+        while (audioSelect.options.length > 1) {
+            audioSelect.remove(1);
+        }
+        
+        if (data.audioDevices && data.audioDevices.length > 0) {
+            data.audioDevices.forEach(device => {
+                const option = document.createElement('option');
+                option.value = device.index;
+                option.text = device.name;
+                if (device.index === data.currentAudioDevice) {
+                    option.selected = true;
+                }
+                audioSelect.appendChild(option);
+            });
+            
+            // 恢复选中值
+            if (currentAudioValue) {
+                audioSelect.value = currentAudioValue;
+            }
+            
+            if (data.controls.includes('audioSelect') && !data.controls.includes('Switch Devices')) {
+                audioSelect.onchange = () => switchDevices();
+            }
+        }
+
+        // 重新初始化 select 元素的样式
+        if (typeof $ !== 'undefined') {
+            $(cameraSelect).selectpicker('refresh');
+            $(audioSelect).selectpicker('refresh');
+        }
+
+        // 为本地摄像头模式添加change事件监听
+        if (data.controls.includes('cameraSelect') && !data.controls.includes('Switch Devices')) {
+            cameraSelect.onchange = () => switchDevices();
         } else {
             cameraSelect.innerHTML = '<option value="">No cameras found</option>';
         }
@@ -341,9 +393,8 @@ function startStatusUpdates() {
 
 // 页面加载完成后启动状态更新
 document.addEventListener('DOMContentLoaded', () => {
-    loadCameras();
+    loadDevices();
     startStatusUpdates();
-    restoreButtonState();
     updateButtonColor();
 });
 
@@ -351,7 +402,6 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('DOMContentLoaded', () => {
     loadDevices();  // 使用新的 loadDevices 替换 loadCameras
     startStatusUpdates();
-    restoreButtonState();
     updateButtonColor();
 });
 

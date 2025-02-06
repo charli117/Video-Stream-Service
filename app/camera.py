@@ -152,7 +152,7 @@ class LocalCamera:
                     'name': LocalCamera._device_names.get(str(i), f'Camera {i}'),
                     'width': int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
                     'height': int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-                    'fps': int(cap.get(cv2.CAP_PROP_FPS))
+                    'fps': int(cap.get(cv2.CAP_PROP_FPS)),
                 }
                 cap.release()
                 available_cameras.append(info)
@@ -339,7 +339,7 @@ class StreamCamera:
             'width': 1920,
             'height': 1080,
             'fps': 30,
-            'controls': ['cameraSelect', 'audioSelect']  # 不需要包含 Refresh Devices 和 Open Analysis
+            'controls': ['cameraSelect', 'audioSelect']
         }]
 
     @staticmethod
