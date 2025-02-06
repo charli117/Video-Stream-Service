@@ -4,13 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="c7800c4b-088e-4c62-8313-176bf30b8a3d" name="更改" comment="feat: 增加音频设备切换，优化设备管理逻辑">
-      <change afterPath="$PROJECT_DIR$/test/streamcamera.py" afterDir="false" />
+    <list default="true" id="c7800c4b-088e-4c62-8313-176bf30b8a3d" name="更改" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/camera.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/camera.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/config.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/run.py" beforeDir="false" afterPath="$PROJECT_DIR$/run.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/test/get_rtsp.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -146,7 +142,7 @@
       <workItem from="1738673000504" duration="115000" />
       <workItem from="1738673138234" duration="13668000" />
       <workItem from="1738716159262" duration="38152000" />
-      <workItem from="1738815212991" duration="13992000" />
+      <workItem from="1738815212991" duration="14692000" />
     </task>
     <task id="LOCAL-00001" summary="feat: 初始化项目结构并添加视频分析功能">
       <option name="closed" value="true" />
@@ -356,7 +352,15 @@
       <option name="project" value="LOCAL" />
       <updated>1738824807320</updated>
     </task>
-    <option name="localTasksCounter" value="27" />
+    <task id="LOCAL-00027" summary="feat: 增加流媒体摄像头支持及音频处理">
+      <option name="closed" value="true" />
+      <created>1738849135106</created>
+      <option name="number" value="00027" />
+      <option name="presentableId" value="LOCAL-00027" />
+      <option name="project" value="LOCAL" />
+      <updated>1738849135106</updated>
+    </task>
+    <option name="localTasksCounter" value="28" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -391,7 +395,8 @@
     <MESSAGE value="feat: 增加音频分析及设备切换功能" />
     <MESSAGE value="feat: 增加音频分析及设备切换功能，优化分析逻辑" />
     <MESSAGE value="feat: 增加音频设备切换，优化设备管理逻辑" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat: 增加音频设备切换，优化设备管理逻辑" />
+    <MESSAGE value="feat: 增加流媒体摄像头支持及音频处理" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: 增加流媒体摄像头支持及音频处理" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

@@ -6,6 +6,7 @@ class InitialConfig:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev'
 
     # 流媒体摄像头配置
+    CAMERA_TYPE = 'stream'  # 'stream' or 'local'
     STREAM_CAMERA_ACCESS_TOKEN = "at.bd1d0zsrdwjf0md3bpq23jky4v51x9xe-8s3fg03m8t-1kmlia0-mw6h93hot"
     STREAM_CAMERA_SERIAL = "G92729163"
     STREAM_CAMERA_PROTOCOL = 3

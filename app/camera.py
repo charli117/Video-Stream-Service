@@ -10,12 +10,16 @@ from typing import Optional
 from config import InitialConfig
 
 
+class Camera:
+    def __init__(self):
+        self.logger = logging.getLogger('Camera')
+
+
 class LocalCamera:
     _device_names = {}  # 类变量，用于存储设备名称映射
 
     def __init__(self):
         self.cap = None
-        self.logger = logging.getLogger('Camera')
         self.width = None
         self.height = None
         self.fps = InitialConfig.DEFAULT_FPS
@@ -166,7 +170,6 @@ class StreamCamera:
         self.audio_container = None
         self.audio_stream = None
         self.video_stream = None
-        self.enable_audio = True
         self.audio_thread = None
 
     @staticmethod
@@ -211,12 +214,11 @@ class StreamCamera:
                     'stimeout': '5000000'
                 })
 
-                if self.enable_audio:
-                    # 创建音频容器
-                    self.audio_container = av.open(rtmp_url, options={
-                        'rtsp_transport': 'tcp',
-                        'stimeout': '5000000'
-                    })
+                # 创建音频容器
+                self.audio_container = av.open(rtmp_url, options={
+                    'rtsp_transport': 'tcp',
+                    'stimeout': '5000000'
+                })
 
                 self.is_running = True
 
@@ -224,20 +226,18 @@ class StreamCamera:
                 self.video_stream = self.video_container.streams.video[0]
 
                 # 初始化音频流
-                if self.enable_audio:
-                    try:
-                        self.audio_stream = self.audio_container.streams.audio[0]
-                        print(f"Audio stream info: {self.audio_stream.rate}Hz, "
-                              f"{self.audio_stream.channels} channels")
+                try:
+                    self.audio_stream = self.audio_container.streams.audio[0]
+                    print(f"Audio stream info: {self.audio_stream.rate}Hz, "
+                          f"{self.audio_stream.channels} channels")
 
-                        # 启动音频处理线程
-                        self.audio_thread = threading.Thread(target=self.audio_processing_loop)
-                        self.audio_thread.daemon = True
-                        self.audio_thread.start()
+                    # 启动音频处理线程
+                    self.audio_thread = threading.Thread(target=self.audio_processing_loop)
+                    self.audio_thread.daemon = True
+                    self.audio_thread.start()
 
-                    except Exception as e:
-                        print(f"Audio initialization error: {e}")
-                        self.enable_audio = False
+                except Exception as e:
+                    print(f"Audio initialization error: {e}")
 
                 # 处理视频流
                 for frame in self.process_stream(self.video_container, self.video_stream):
