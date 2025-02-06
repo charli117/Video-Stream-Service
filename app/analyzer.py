@@ -87,32 +87,35 @@ class BaseAnalyzer:
         """切换分析状态"""
         with self._status_lock:
             try:
-                # 检查状态是否真的需要改变
+                # 检查运行状态
+                if not self.is_running:
+                    self.logger.warning("Cannot toggle analysis when analyzer is not running")
+                    return False
+                    
+                # 检查状态是否需要改变
                 if self.analysis_enabled == enabled:
                     return True
                     
-                # 检查运行状态
-                if not self.is_running and enabled:
-                    self.logger.warning("Cannot enable analysis when analyzer is not running")
-                    return False
-    
                 previous_state = self.analysis_enabled
                 self.analysis_enabled = enabled
-                self.logger.info(f"Analysis state changed: {previous_state} -> {enabled}")
-    
-                # 添加队列清理
+                
+                # 清理队列
                 if not enabled:
                     self._clear_queues()
-    
-                # 添加更详细的状态日志
+                    
+                # 记录状态变化
+                self.logger.info(f"Analysis state changed from {previous_state} to {enabled}")
+                
                 if enabled:
-                    self.logger.info("Analysis started - now monitoring for changes")
+                    self.logger.info("Analysis started - monitoring for changes")
                 else:
-                    self.logger.info("Analysis stopped - no longer monitoring for changes")
-    
+                    self.logger.info("Analysis stopped - no longer monitoring")
+                    
                 return True
+                
             except Exception as e:
                 self.logger.error(f"Error toggling analysis: {str(e)}")
+                self.analysis_enabled = False  # 发生错误时重置状态
                 return False
 
     def _clear_queues(self):
@@ -172,8 +175,31 @@ class BaseAnalyzer:
             filename = f'audio_{timestamp}.wav'
             filepath = os.path.join(self.output_dir, filename)
 
+            # 确保音频数据格式正确
+            if not isinstance(audio_data, np.ndarray):
+                self.logger.error("Invalid audio data format")
+                return None
+
+            # 确保数据是float32类型
+            if audio_data.dtype != np.float32:
+                audio_data = audio_data.astype(np.float32)
+
+            # 规范化音频数据
+            if audio_data.max() > 1.0:
+                audio_data = audio_data / 32768.0
+
+            # 确保数据形状正确
+            if audio_data.ndim == 1:
+                audio_data = audio_data.reshape(-1, 1)
+
             # 保存音频
-            sf.write(filepath, audio_data, InitialConfig.AUDIO_SAMPLE_RATE)
+            sf.write(
+                filepath, 
+                audio_data, 
+                InitialConfig.AUDIO_SAMPLE_RATE,
+                format='WAV',
+                subtype='FLOAT'
+            )
 
             return {
                 'filepath': filepath,
@@ -272,15 +298,16 @@ class BaseAnalyzer:
     def _llm_analyze(self, data):
         """LLM分析方法"""
         try:
-            # 清理旧文件
-            extension = '.jpg' if isinstance(data, np.ndarray) else '.wav'
-            self.cleanup_old_files(extension)  # 更新调用
-
-            # 保存数据
+            # 根据数据类型判断处理方式
             if isinstance(data, np.ndarray):
-                result = self._save_base64_image(data)
-            else:
-                result = self._save_audio_file(data)
+                if len(data.shape) == 3:  # 视频帧数据
+                    extension = '.jpg'
+                    self.cleanup_old_files(extension)
+                    result = self._save_base64_image(data)
+                else:  # 音频数据
+                    extension = '.wav'
+                    self.cleanup_old_files(extension)
+                    result = self._save_audio_file(data)
 
             if result is None:
                 self.logger.error("Failed to save data")
@@ -321,15 +348,23 @@ class VideoAnalyzer(BaseAnalyzer):
 
     def start(self, video_source=0):
         """启动视频分析器"""
-        if self.is_running:
-            return
-
         try:
+            if self.is_running:
+                return True
+                
             self.video_source = video_source
             self.camera.start(video_source)
-            super().start()  # 使用父类的线程管理机制
-            self.logger.info("VideoAnalyzer started")
-
+            
+            # 确保摄像头正确初始化
+            if not self.camera.is_initialized:
+                raise RuntimeError("Camera failed to initialize")
+                
+            self.is_running = True
+            self._setup_logging()
+            self._start_threads()
+            self.logger.info("VideoAnalyzer started successfully")
+            return True
+        
         except Exception as e:
             self.is_running = False
             self.logger.error(f"Failed to start VideoAnalyzer: {str(e)}")
@@ -340,9 +375,20 @@ class VideoAnalyzer(BaseAnalyzer):
         if not self.is_running:
             return
 
-        self.is_running = False
-        self.camera.release()
-        super().stop()
+        try:
+            self.is_running = False
+            self.analysis_enabled = False  # 确保分析状态被重置
+            self.camera.release()
+
+            # 等待所有线程结束
+            for thread in self._threads:
+                thread.join(timeout=1.0)
+
+            self._clear_queues()
+            self.logger.info("VideoAnalyzer stopped successfully")
+
+        except Exception as e:
+            self.logger.error(f"Error stopping VideoAnalyzer: {str(e)}")
 
     def switch_camera(self, camera_index):
         """切换摄像头"""
@@ -360,25 +406,40 @@ class VideoAnalyzer(BaseAnalyzer):
         """生成视频流"""
         while self.is_running:
             try:
+                if not self.camera.is_initialized:
+                    self.logger.error("Camera is not initialized")
+                    time.sleep(1)
+                    continue
+                
                 ret, frame = self.camera.read()
-                if ret and frame is not None:
-                    frame = self._resize_frame(frame)
+                if not ret or frame is None:
+                    self.logger.error("Failed to read frame from camera")
+                    time.sleep(0.1)
+                    continue
+                
+                frame = self._resize_frame(frame)
+                if frame is None:
+                    self.logger.error("Failed to resize frame")
+                    continue
 
-                    # 计算FPS
-                    current_time = time.time()
-                    self._frame_times.append(current_time - self._last_frame_time)
-                    self._last_frame_time = current_time
-                    self.fps = int(1.0 / (sum(self._frame_times) / len(self._frame_times)))
+                # 计算FPS
+                current_time = time.time()
+                self._frame_times.append(current_time - self._last_frame_time)
+                self._last_frame_time = current_time
+                self.fps = int(1.0 / (sum(self._frame_times) / len(self._frame_times)))
 
-                    # 压缩图像
-                    ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                    if ret:
-                        yield (b'--frame\r\n'
-                               b'Content-Type: image/jpeg\r\n\r\n' +
-                               buffer.tobytes() + b'\r\n')
+                # 压缩图像
+                ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                if not ret:
+                    self.logger.error("Failed to encode frame")
+                    continue
+                
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' +
+                       buffer.tobytes() + b'\r\n')
 
-                        if not self.frame_queue.full() and self.analysis_enabled:
-                            self.frame_queue.put(frame.copy())
+                if not self.frame_queue.full() and self.analysis_enabled:
+                    self.frame_queue.put(frame.copy())
 
             except Exception as e:
                 self.logger.error(f"Error generating frames: {str(e)}")
@@ -640,14 +701,25 @@ class AudioAnalyzer(BaseAnalyzer):
             self.logger.error(f"Error in audio change detection: {str(e)}")
             return False
 
+    def process_stream_audio(self, audio_data):
+        """处理流式音频数据"""
+        try:
+            if self.analysis_enabled:
+                # 直接调用 LLM 分析
+                self._llm_analyze(audio_data)
+                
+        except Exception as e:
+            self.logger.error(f"Error processing stream audio: {str(e)}")
+            
     def integrate_stream_audio_processing(self, stream_camera):
-        """Integrate audio processing with StreamCamera"""
+        """集成流式摄像头的音频处理"""
         try:
             if not isinstance(stream_camera, Camera):
                 raise ValueError("Invalid stream camera instance")
-
-            stream_camera.audio_processing_loop = self._analyze_loop
+                
+            # 设置音频回调函数
+            stream_camera.set_audio_callback(self.process_stream_audio)
             self.logger.info("Integrated audio processing with StreamCamera")
-
+            
         except Exception as e:
             self.logger.error(f"Error integrating audio processing: {str(e)}")

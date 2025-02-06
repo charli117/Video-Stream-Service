@@ -14,16 +14,42 @@ class Camera:
     def __init__(self):
         self.logger = logging.getLogger('Camera')
         self.camera = None
-
+        self.is_initialized = False  # 添加初始化标志
+        # 添加基本属性
+        self.width = 0
+        self.height = 0
+        self.fps = 0
+        
     def start(self, source=0):
-        if InitialConfig.CAMERA_TYPE == 'local':
-            self.camera = LocalCamera()
-        elif InitialConfig.CAMERA_TYPE == 'stream':
-            self.camera = StreamCamera()
-        else:
-            raise ValueError("Invalid CAMERA_TYPE in configuration")
+        try:
+            if InitialConfig.CAMERA_TYPE == 'local':
+                self.camera = LocalCamera()
+            elif InitialConfig.CAMERA_TYPE == 'stream':
+                self.camera = StreamCamera()
+            else:
+                raise ValueError("Invalid CAMERA_TYPE in configuration")
+                
+            self.camera.start(source)
+            # 同步所有必要的属性
+            self.is_initialized = self.camera.is_initialized
+            self.width = self.camera.width
+            self.height = self.camera.height
+            self.fps = self.camera.fps
+            
+        except Exception as e:
+            self.logger.error(f"Error starting camera: {str(e)}")
+            raise RuntimeError(f"Failed to start camera: {str(e)}")
 
-        self.camera.start(source)
+    def get_info(self):
+        """获取摄像头信息"""
+        if self.camera is None:
+            return {
+                'initialized': False,
+                'width': 0,
+                'height': 0,
+                'fps': 0
+            }
+        return self.camera.get_info()
 
     def read(self):
         if self.camera is None:
@@ -76,6 +102,7 @@ class LocalCamera:
     _device_names = {}  # 类变量，用于存储设备名称映射
 
     def __init__(self):
+        self.logger = logging.getLogger('LocalCamera')  # 添加 logger 初始化
         self.cap = None
         self.width = None
         self.height = None
@@ -224,6 +251,7 @@ class StreamCamera:
     _device_names = {}  # 类变量，用于存储设备名称映射
 
     def __init__(self):
+        self.logger = logging.getLogger('StreamCamera')  # 确保 logger 正确初始化
         self.is_running = False
         self.video_container = None
         self.audio_container = None
@@ -231,7 +259,61 @@ class StreamCamera:
         self.video_stream = None
         self.audio_thread = None
         self.is_initialized = False
+        self.width = 1920
+        self.height = 1080
+        self.fps = 30
+        self._audio_callback = None
+        self._silence_threshold = 0.02
+        self.analysis_enabled = False
 
+    def set_analysis_enabled(self, enabled):
+        """设置是否启用分析"""
+        self.analysis_enabled = enabled
+        
+    def set_audio_callback(self, callback):
+        """设置音频回调函数"""
+        self._audio_callback = callback
+        
+    def get_info(self):
+        """获取摄像头信息"""
+        return {
+            'initialized': self.is_initialized,
+            'width': self.width,
+            'height': self.height,
+            'fps': self.fps
+        }
+        
+    def audio_processing_loop(self):
+        """音频处理循环"""
+        try:
+            for frame in self.process_stream(self.audio_container, self.audio_stream):
+                if not self.is_running:
+                    break
+
+                try:
+                    # 转换音频帧为numpy数组
+                    audio_data = frame.to_ndarray()
+
+                    # 确保数据是float32类型
+                    if audio_data.dtype != np.float32:
+                        audio_data = audio_data.astype(np.float32)
+
+                    # 规范化音频数据
+                    if audio_data.max() > 1.0:
+                        audio_data = audio_data / 32768.0
+
+                    # 检测是否为静音
+                    if np.abs(audio_data).mean() > InitialConfig.AUDIO_CHANGE_THRESHOLD:
+                        # 调用分析方法
+                        if self._audio_callback:
+                            self._audio_callback(audio_data)
+
+                except Exception as e:
+                    self.logger.error(f"Audio frame processing error: {e}")
+
+        except Exception as e:
+            self.logger.error(f"Audio processing error: {e}")
+            
     @staticmethod
     def is_valid_camera(index):
         """公共方法：检查摄像头是否有效"""
@@ -288,10 +370,11 @@ class StreamCamera:
             print(f"Stream processing error: {e}")
 
     def start(self, source=0):
+        """启动流式摄像头"""
         rtmp_url = self.get_stream_url()
         if not rtmp_url:
             raise ValueError("RTMP URL is required")
-
+    
         retry_count = 0
         max_retries = 3
         while retry_count < max_retries:
@@ -301,54 +384,44 @@ class StreamCamera:
                     'rtsp_transport': 'tcp',
                     'stimeout': '5000000'
                 })
-
+    
                 # 创建音频容器
                 self.audio_container = av.open(rtmp_url, options={
                     'rtsp_transport': 'tcp',
                     'stimeout': '5000000'
                 })
-
+    
                 self.is_running = True
-
+                self.is_initialized = True
+    
                 # 获取视频流
                 self.video_stream = self.video_container.streams.video[0]
-
+    
                 # 初始化音频流
                 try:
                     self.audio_stream = self.audio_container.streams.audio[0]
-                    print(f"Audio stream info: {self.audio_stream.rate}Hz, "
+                    self.logger.info(f"Audio stream info: {self.audio_stream.rate}Hz, "
                           f"{self.audio_stream.channels} channels")
-
+    
                     # 启动音频处理线程
                     self.audio_thread = threading.Thread(target=self.audio_processing_loop)
                     self.audio_thread.daemon = True
                     self.audio_thread.start()
-
+    
                 except Exception as e:
-                    print(f"Audio initialization error: {e}")
-
-                # 处理视频流
-                for frame in self.process_stream(self.video_container, self.video_stream):
-                    if isinstance(frame, av.VideoFrame):
-                        img = frame.to_ndarray(format='bgr24')
-                        if InitialConfig.CAMERA_TYPE != 'stream':
-                            cv2.imshow('RTMP Stream', img)
-
-                        if cv2.waitKey(1) & 0xFF == ord('q'):
-                            self.is_running = False
-                            break
-
-                break  # 如果成功运行，跳出重试循环
-
+                    self.logger.error(f"Audio initialization error: {e}")
+    
+                return True
+    
             except av.error.OSError as e:
-                print(f"Stream error (attempt {retry_count + 1}/{max_retries}): {e}")
+                self.logger.error(f"Stream error (attempt {retry_count + 1}/{max_retries}): {e}")
                 retry_count += 1
                 time.sleep(2)
             except Exception as e:
-                print(f"Unexpected error: {e}")
+                self.logger.error(f"Unexpected error: {e}")
                 break
-            finally:
-                self.cleanup()
+    
+        return False
 
     def read(self):
         if not self.is_running or self.video_stream is None:
@@ -362,49 +435,6 @@ class StreamCamera:
         except Exception as e:
             print(f"Error reading frame: {e}")
             return False, None
-
-    def audio_processing_loop(self):
-        """音频处理循环"""
-        try:
-            # 创建与输入流相同通道数的输出流
-            stream = sd.RawOutputStream(
-                samplerate=self.audio_stream.rate,
-                channels=self.audio_stream.channels,
-                dtype=np.float32
-            )
-
-            with stream:
-                print(f"Audio output started: {stream.samplerate}Hz, {stream.channels} channels")
-
-                for frame in self.process_stream(self.audio_container, self.audio_stream):
-                    if not self.is_running:
-                        break
-
-                    try:
-                        # 转换音频帧为numpy数组
-                        audio_data = frame.to_ndarray()
-
-                        # 确保数据是float32类型
-                        if audio_data.dtype != np.float32:
-                            audio_data = audio_data.astype(np.float32)
-
-                        # 规范化音频数据
-                        if audio_data.max() > 1.0:
-                            audio_data = audio_data / 32768.0
-
-                        # 确保数据形状正确
-                        if audio_data.ndim == 1:
-                            audio_data = audio_data.reshape(-1, 1)
-
-                        # 写入音频数据
-                        stream.write(audio_data)
-
-                    except Exception as e:
-                        print(f"Audio frame processing error: {e}")
-                        continue
-
-        except Exception as e:
-            print(f"Audio processing error: {e}")
 
     def cleanup(self) -> None:
         self.is_running = False

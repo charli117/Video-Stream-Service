@@ -50,20 +50,17 @@ function showImageViewer(imageUrl) {
 async function loadDevices() {
     try {
         const refreshButton = document.getElementById('refreshButton');
-        const switchButton = document.getElementById('switchButton');
-
         refreshButton.disabled = true;
-        switchButton.disabled = true;
 
-        // 获取设备名称
+        // 1. 获取设备名称并发送到服务器
+        let deviceNames = {};
+        let audioDeviceNames = {};
+        
         if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
             const devices = await navigator.mediaDevices.enumerateDevices();
             const videoDevices = devices.filter(device => device.kind === 'videoinput');
             const audioDevices = devices.filter(device => device.kind === 'audioinput');
             
-            const deviceNames = {};
-            const audioDeviceNames = {};
-
             videoDevices.forEach((device, index) => {
                 deviceNames[index] = device.label || `Camera ${index}`;
             });
@@ -83,34 +80,37 @@ async function loadDevices() {
                     audioDeviceNames
                 })
             });
-
-            
-            videoDevices.forEach((device, index) => {
-                deviceNames.video[index] = device.label || `Camera ${index}`;
-            });
-            
-            audioDevices.forEach((device, index) => {
-                deviceNames.audio[index] = device.label || `Microphone ${index}`;
-            });
-
-            // 发送设备名称到服务器
-            await fetch('/api/device_names', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ deviceNames })
-            });
         }
 
-        // 获取设备列表
+        // 2. 获取设备列表和控件配置
         const response = await fetch("/api/devices");
         const data = await response.json();
-
-        // 更新摄像头选择
-        const cameraSelect = document.getElementById('cameraSelect');
-        cameraSelect.innerHTML = '';
         
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        // 3. 更新控件显示状态
+        const controls = data.controls || [];
+        const elements = {
+            'cameraSelect': document.getElementById('cameraSelect').parentElement,
+            'audioSelect': document.getElementById('audioSelect').parentElement,
+            'Refresh Devices': document.getElementById('refreshButton').parentElement,
+            'Open Analysis': document.getElementById('analysisToggle').parentElement
+        };
+        
+        Object.keys(elements).forEach(control => {
+            if (elements[control]) {
+                elements[control].style.display = controls.includes(control) ? 'block' : 'none';
+            }
+        });
+
+        // 4. 更新设备选择列表
+        const cameraSelect = document.getElementById('cameraSelect');
+        const audioSelect = document.getElementById('audioSelect');
+        
+        // 更新摄像头选择
+        cameraSelect.innerHTML = '';
         if (data.cameras && data.cameras.length > 0) {
             data.cameras.forEach(camera => {
                 const option = document.createElement('option');
@@ -121,14 +121,17 @@ async function loadDevices() {
                 }
                 cameraSelect.appendChild(option);
             });
+            
+            // 为本地摄像头模式添加change事件监听
+            if (data.controls.includes('cameraSelect') && !data.controls.includes('Switch Devices')) {
+                cameraSelect.onchange = () => switchDevices();
+            }
         } else {
             cameraSelect.innerHTML = '<option value="">No cameras found</option>';
         }
 
         // 更新音频设备选择
-        const audioSelect = document.getElementById('audioSelect');
         audioSelect.innerHTML = '';
-        
         if (data.audioDevices && data.audioDevices.length > 0) {
             data.audioDevices.forEach(device => {
                 const option = document.createElement('option');
@@ -139,34 +142,51 @@ async function loadDevices() {
                 }
                 audioSelect.appendChild(option);
             });
+            
+            // 为本地音频设备模式添加change事件监听
+            if (data.controls.includes('audioSelect') && !data.controls.includes('Switch Devices')) {
+                audioSelect.onchange = () => switchDevices();
+            }
         } else {
             audioSelect.innerHTML = '<option value="">No audio devices found</option>';
         }
 
+        // 5. 更新当前设备状态
         currentCamera = data.currentCamera;
         currentAudioDevice = data.currentAudioDevice;
-        switchButton.disabled = false;
-
-        // 根据 CAMERA_TYPE 显示不同的控件
-        const controls = data.controls;
-        const cameraSelectWrapper = document.getElementById('cameraSelect').parentElement;
-        const audioSelectWrapper = document.getElementById('audioSelect').parentElement;
-        const switchButtonWrapper = document.getElementById('switchButton').parentElement;
-        const refreshButtonWrapper = document.getElementById('refreshButton').parentElement;
-        const analysisToggleWrapper = document.getElementById('analysisToggle').parentElement;
-
-        cameraSelectWrapper.style.display = controls.includes('cameraSelect') ? 'block' : 'none';
-        audioSelectWrapper.style.display = controls.includes('audioSelect') ? 'block' : 'none';
-        switchButtonWrapper.style.display = controls.includes('Switch Devices') ? 'block' : 'none';
-        refreshButtonWrapper.style.display = controls.includes('Refresh Devices') ? 'block' : 'none';
-        analysisToggleWrapper.style.display = controls.includes('Open Analysis') ? 'block' : 'none';
-
+        
+        hideError();
+        
     } catch (error) {
         showError('Error loading devices: ' + error.message);
     } finally {
         refreshButton.disabled = false;
     }
 }
+
+// 如果需要切换设备，直接调用 switchDevices
+async function onDeviceChange() {
+    const cameraSelect = document.getElementById('cameraSelect');
+    const audioSelect = document.getElementById('audioSelect');
+    
+    if (cameraSelect && audioSelect) {
+        await switchDevices();
+    }
+}
+
+// 为设备选择添加 change 事件监听器
+document.addEventListener('DOMContentLoaded', () => {
+    const cameraSelect = document.getElementById('cameraSelect');
+    const audioSelect = document.getElementById('audioSelect');
+    
+    if (cameraSelect) {
+        cameraSelect.addEventListener('change', onDeviceChange);
+    }
+    
+    if (audioSelect) {
+        audioSelect.addEventListener('change', onDeviceChange);
+    }
+});
 
 async function switchDevices() {
     const cameraSelect = document.getElementById('cameraSelect');
@@ -180,10 +200,13 @@ async function switchDevices() {
     }
 
     try {
-        document.getElementById('switchButton').disabled = true;
-        document.getElementById('refreshButton').disabled = true;
+        // 只禁用刷新按钮
+        const refreshButton = document.getElementById('refreshButton');
+        if (refreshButton) {
+            refreshButton.disabled = true;
+        }
 
-        console.log(`Switching to camera ${cameraIndex} and audio device ${audioIndex}`);  // P92f1
+        console.log(`Switching to camera ${cameraIndex} and audio device ${audioIndex}`);
 
         const response = await fetch("/api/devices/switch", {
             method: 'POST',
@@ -204,7 +227,7 @@ async function switchDevices() {
         currentCamera = cameraIndex;
         currentAudioDevice = audioIndex;
 
-        console.log(`Switched to camera ${cameraIndex} and audio device ${audioIndex}`);  // P92f1
+        console.log(`Switched to camera ${cameraIndex} and audio device ${audioIndex}`);
 
         // 刷新视频源
         const videoFeed = document.getElementById('videoFeed');
@@ -215,8 +238,11 @@ async function switchDevices() {
     } catch (error) {
         showError('Error switching devices: ' + error.message);
     } finally {
-        document.getElementById('switchButton').disabled = false;
-        document.getElementById('refreshButton').disabled = false;
+        // 只恢复刷新按钮
+        const refreshButton = document.getElementById('refreshButton');
+        if (refreshButton) {
+            refreshButton.disabled = false;
+        }
     }
 }
 
@@ -310,7 +336,7 @@ function startStatusUpdates() {
 document.addEventListener('DOMContentLoaded', () => {
     loadCameras();
     startStatusUpdates();
-    restoreButtonState();  // 添加这一行
+    restoreButtonState();
     updateButtonColor();
 });
 
@@ -329,6 +355,9 @@ function toggleAnalysis() {
     const analysisToggle = document.getElementById('analysisToggle');
     const isEnabled = analysisToggle.textContent === 'Open Analysis';
     
+    // 禁用按钮防止重复点击
+    analysisToggle.disabled = true;
+    
     // 清除之前的定时器
     if (toggleAnalysisTimeout) {
         clearTimeout(toggleAnalysisTimeout);
@@ -343,20 +372,35 @@ function toggleAnalysis() {
             },
             body: JSON.stringify({ enabled: isEnabled })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'Failed to toggle analysis');
+                });
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
                 analysisToggle.textContent = data.analysis_enabled ? 'Close Analysis' : 'Open Analysis';
                 updateButtonColor();
                 saveButtonState();
+                hideError();  // 成功时隐藏错误信息
             } else {
-                showError('Failed to toggle analysis');
+                throw new Error(data.error || 'Failed to toggle analysis');
             }
         })
         .catch(error => {
             showError('Error toggling analysis: ' + error.message);
+            // 发生错误时恢复按钮状态
+            analysisToggle.textContent = isEnabled ? 'Close Analysis' : 'Open Analysis';
+            updateButtonColor();
+        })
+        .finally(() => {
+            // 重新启用按钮
+            analysisToggle.disabled = false;
         });
-    }, 300); // 300ms 的防抖延迟
+    }, 300);
 }
 
 // 更新按钮颜色的函数

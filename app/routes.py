@@ -29,37 +29,29 @@ def video_feed():
 
 
 @main_bp.route('/api/devices')
-def list_devices():
-    """获取可用设备列表"""
+def get_devices():
+    """获取设备列表"""
     try:
         cameras = Camera.list_cameras()
         audio_devices = Microphone.list_devices()
-
-        if InitialConfig.CAMERA_TYPE == 'stream':
-            return jsonify({
-                'cameras': cameras,
-                'audioDevices': audio_devices,
-                'currentCamera': video_analyzer.video_source,
-                'currentAudioDevice': audio_analyzer.current_device,
-                'controls': ['Refresh Devices', 'Open Analysis']
-            })
+        
+        # 根据 CAMERA_TYPE 返回不同的控件配置
+        controls = []
+        if InitialConfig.CAMERA_TYPE == 'local':
+            controls = ['cameraSelect', 'audioSelect', 'Refresh Devices', 'Open Analysis']
         else:
-            return jsonify({
-                'cameras': cameras,
-                'audioDevices': audio_devices,
-                'currentCamera': video_analyzer.video_source,
-                'currentAudioDevice': audio_analyzer.current_device,
-                'controls': ['cameraSelect', 'audioSelect', 'Switch Devices', 'Refresh Devices', 'Open Analysis']
-            })
-    except Exception as e:
-        logger.error(f"Error listing devices: {str(e)}")
+            controls = ['Refresh Devices', 'Open Analysis']
+            
         return jsonify({
-            'cameras': [],
-            'audioDevices': [],
-            'currentCamera': None,
-            'currentAudioDevice': None,
-            'error': str(e)
-        }), 500
+            'cameras': cameras,
+            'audioDevices': audio_devices,
+            'currentCamera': video_analyzer.video_source,
+            'currentAudioDevice': audio_analyzer.current_device,
+            'controls': controls
+        })
+    except Exception as e:
+        logger.error(f"Error getting devices: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
 @main_bp.route('/api/devices/switch', methods=['POST'])
@@ -123,6 +115,7 @@ def get_status():
         current_camera_index = str(video_analyzer.video_source)
         current_audio_index = str(audio_analyzer.current_device)
 
+        # 初始化基本状态信息
         status = {
             'is_running': video_analyzer.is_running,
             'current_camera': video_analyzer.video_source,
@@ -130,21 +123,23 @@ def get_status():
             'current_audio_device': audio_analyzer.current_device,
             'current_audio_name': Microphone.get_device_name(current_audio_index),
             'fps': video_analyzer.fps,
-            'camera_info': {},
+            'camera_info': {
+                'initialized': False,
+                'width': 0,
+                'height': 0,
+                'fps': 0,
+                'name': Camera.get_device_name(current_camera_index)
+            },
             'analysis_enabled': video_analyzer.analysis_enabled,
             'frame_changed': not video_analyzer.change_queue.empty(),
             'frame_changes': [],
             'audio_changes': []
         }
 
-        if video_analyzer.camera and video_analyzer.camera.is_initialized:
-            status['camera_info'] = {
-                'width': video_analyzer.camera.width,
-                'height': video_analyzer.camera.height,
-                'fps': video_analyzer.camera.fps,
-                'initialized': True,
-                'name': Camera.get_device_name(current_camera_index)
-            }
+        # 更新摄像头信息
+        if video_analyzer.camera and hasattr(video_analyzer.camera, 'camera'):
+            camera_info = video_analyzer.camera.get_info()
+            status['camera_info'].update(camera_info)
 
         # 获取音、视频帧变化记录
         if status['analysis_enabled']:
@@ -201,8 +196,49 @@ def get_status():
 
 
 @main_bp.route('/api/toggle_analysis', methods=['POST'])
-def toggle_analysis():
-    data = request.get_json()
-    enabled = data.get('enabled', False)
-    success = video_analyzer.toggle_analysis(enabled)
-    return jsonify({'success': success, 'analysis_enabled': video_analyzer.analysis_enabled})
+@main_bp.route('/api/start', methods=['POST'])
+def start_analysis():
+    try:
+        data = request.get_json()
+        enabled = data.get('enabled', False)
+        
+        # 检查分析器状态
+        if not video_analyzer.is_running:
+            try:
+                video_analyzer.start(video_analyzer.video_source)
+                if InitialConfig.CAMERA_TYPE != 'stream':
+                    audio_analyzer.start()
+            except Exception as e:
+                logger.error(f"Failed to start analyzers: {str(e)}")
+                return jsonify({
+                    'success': False,
+                    'error': 'Failed to start analyzers'
+                }), 500
+        
+        # 切换分析状态
+        success = video_analyzer.toggle_analysis(enabled)
+        if success:
+            if InitialConfig.CAMERA_TYPE == 'stream':
+                # 对于流式摄像头，直接设置其音频分析状态
+                if hasattr(video_analyzer.camera, 'set_analysis_enabled'):
+                    video_analyzer.camera.set_analysis_enabled(enabled)
+            else:
+                # 本地摄像头模式下同步音频分析器状态
+                audio_analyzer.toggle_analysis(enabled)
+                
+            return jsonify({
+                'success': True,
+                'analysis_enabled': video_analyzer.analysis_enabled
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to toggle analysis state'
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Error in toggle_analysis: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
