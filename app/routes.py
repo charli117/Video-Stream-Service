@@ -36,7 +36,6 @@ def get_devices():
         audio_devices = Microphone.list_devices()
         
         # 根据 CAMERA_TYPE 返回不同的控件配置
-        controls = []
         if InitialConfig.CAMERA_TYPE == 'local':
             controls = ['cameraSelect', 'audioSelect', 'Refresh Devices', 'Open Analysis']
         else:
@@ -242,3 +241,13 @@ def start_analysis():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@main_bp.route('/api/cleanup', methods=['POST'])
+def cleanup():
+    try:
+        if video_analyzer.camera:
+            video_analyzer.camera.cleanup()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500

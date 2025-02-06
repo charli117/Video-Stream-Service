@@ -62,7 +62,13 @@ body {
 .button-group {
     display: flex;
     gap: 10px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;  /* 防止按钮换行 */
+    align-items: center;
+}
+
+.button-group button {
+    white-space: nowrap;  /* 防止按钮文字换行 */
+    flex-shrink: 0;  /* 防止按钮被压缩 */
 }
 
 select {

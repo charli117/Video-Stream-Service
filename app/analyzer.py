@@ -309,12 +309,12 @@ class BaseAnalyzer:
                     self.cleanup_old_files(extension)
                     result = self._save_audio_file(data)
 
-            if result is None:
-                self.logger.error("Failed to save data")
-                return
+                if result is None:
+                    self.logger.error("Failed to save data")
+                    return
 
-            self.logger.info(f"Data saved: {result['filepath']}")
-            # TODO: 实际的LLM服务调用代码
+                self.logger.info(f"Data saved: {result['filepath']}")
+                # TODO: 实际的LLM服务调用代码
 
         except Exception as e:
             self.logger.error(f"Error in LLM analysis: {str(e)}")
@@ -575,6 +575,7 @@ class AudioAnalyzer(BaseAnalyzer):
         self.threshold = InitialConfig.AUDIO_CHANGE_THRESHOLD
         self.microphone = Microphone()
         self.current_device = None  # 添加当前设备属性
+        self._audio_thread = None  # 初始化音频线程属性
         
     def switch_audio(self, device_index):
         """切换音频输入设备"""
@@ -711,15 +712,15 @@ class AudioAnalyzer(BaseAnalyzer):
         except Exception as e:
             self.logger.error(f"Error processing stream audio: {str(e)}")
             
-    def integrate_stream_audio_processing(self, stream_camera):
-        """集成流式摄像头的音频处理"""
-        try:
-            if not isinstance(stream_camera, Camera):
-                raise ValueError("Invalid stream camera instance")
-                
-            # 设置音频回调函数
-            stream_camera.set_audio_callback(self.process_stream_audio)
-            self.logger.info("Integrated audio processing with StreamCamera")
-            
-        except Exception as e:
-            self.logger.error(f"Error integrating audio processing: {str(e)}")
+    # def integrate_stream_audio_processing(self, stream_camera):
+    #     """集成流式摄像头的音频处理"""
+    #     try:
+    #         if not isinstance(stream_camera, Camera):
+    #             raise ValueError("Invalid stream camera instance")
+    #
+    #         # 设置音频回调函数
+    #         stream_camera.set_audio_callback(self.process_stream_audio)
+    #         self.logger.info("Integrated audio processing with StreamCamera")
+    #
+    #     except Exception as e:
+    #         self.logger.error(f"Error integrating audio processing: {str(e)}")

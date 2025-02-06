@@ -4,7 +4,6 @@ import logging
 import numpy as np
 import requests
 import av
-import sounddevice as sd
 import threading
 from typing import Optional
 from config import InitialConfig
@@ -19,6 +18,7 @@ class Camera:
         self.width = 0
         self.height = 0
         self.fps = 0
+        self._audio_callback = None  # 添加音频回调属性
         
     def start(self, source=0):
         try:
@@ -251,7 +251,8 @@ class StreamCamera:
     _device_names = {}  # 类变量，用于存储设备名称映射
 
     def __init__(self):
-        self.logger = logging.getLogger('StreamCamera')  # 确保 logger 正确初始化
+        self.logger = logging.getLogger('StreamCamera')
+        self._lock = threading.Lock()  # 添加线程锁
         self.is_running = False
         self.video_container = None
         self.audio_container = None
@@ -337,7 +338,8 @@ class StreamCamera:
             'name': StreamCamera._device_names.get('0', 'Stream Camera 0'),
             'width': 1920,
             'height': 1080,
-            'fps': 30
+            'fps': 30,
+            'controls': ['cameraSelect', 'audioSelect']  # 不需要包含 Refresh Devices 和 Open Analysis
         }]
 
     @staticmethod
@@ -371,57 +373,66 @@ class StreamCamera:
 
     def start(self, source=0):
         """启动流式摄像头"""
-        rtmp_url = self.get_stream_url()
-        if not rtmp_url:
-            raise ValueError("RTMP URL is required")
-    
-        retry_count = 0
-        max_retries = 3
-        while retry_count < max_retries:
-            try:
-                # 创建视频容器
-                self.video_container = av.open(rtmp_url, options={
-                    'rtsp_transport': 'tcp',
-                    'stimeout': '5000000'
-                })
-    
-                # 创建音频容器
-                self.audio_container = av.open(rtmp_url, options={
-                    'rtsp_transport': 'tcp',
-                    'stimeout': '5000000'
-                })
-    
-                self.is_running = True
-                self.is_initialized = True
-    
-                # 获取视频流
-                self.video_stream = self.video_container.streams.video[0]
-    
-                # 初始化音频流
+        with self._lock:
+            # 确保在重新启动前清理旧的连接
+            self.cleanup()
+            
+            rtmp_url = self.get_stream_url()
+            if not rtmp_url:
+                raise ValueError("RTMP URL is required")
+        
+            retry_count = 0
+            max_retries = 3
+            while retry_count < max_retries:
                 try:
-                    self.audio_stream = self.audio_container.streams.audio[0]
-                    self.logger.info(f"Audio stream info: {self.audio_stream.rate}Hz, "
-                          f"{self.audio_stream.channels} channels")
-    
-                    # 启动音频处理线程
-                    self.audio_thread = threading.Thread(target=self.audio_processing_loop)
-                    self.audio_thread.daemon = True
-                    self.audio_thread.start()
-    
+                    # 创建视频容器
+                    self.video_container = av.open(rtmp_url, options={
+                        'rtsp_transport': 'tcp',
+                        'stimeout': '5000000',
+                        'reconnect': '1',           # 添加重连选项
+                        'reconnect_streamed': '1',  # 流式重连
+                        'reconnect_delay_max': '2'  # 最大重连延迟
+                    })
+                    
+                    # 创建音频容器
+                    self.audio_container = av.open(rtmp_url, options={
+                        'rtsp_transport': 'tcp',
+                        'stimeout': '5000000'
+                    })
+
+                    self.is_running = True
+                    self.is_initialized = True
+
+                    # 获取视频流
+                    self.video_stream = self.video_container.streams.video[0]
+
+                    # 初始化音频流
+                    try:
+                        self.audio_stream = self.audio_container.streams.audio[0]
+                        self.logger.info(f"Audio stream info: {self.audio_stream.rate}Hz, "
+                              f"{self.audio_stream.channels} channels")
+
+                        # 启动音频处理线程
+                        self.audio_thread = threading.Thread(target=self.audio_processing_loop)
+                        self.audio_thread.daemon = True
+                        self.audio_thread.start()
+
+                    except Exception as e:
+                        self.logger.error(f"Audio initialization error: {e}")
+
+                    return True
+
+                except av.error.OSError as e:
+                    self.logger.error(f"Stream error (attempt {retry_count + 1}/{max_retries}): {e}")
+                    self.cleanup()  # 确保清理资源
+                    retry_count += 1
+                    time.sleep(2)
                 except Exception as e:
-                    self.logger.error(f"Audio initialization error: {e}")
-    
-                return True
-    
-            except av.error.OSError as e:
-                self.logger.error(f"Stream error (attempt {retry_count + 1}/{max_retries}): {e}")
-                retry_count += 1
-                time.sleep(2)
-            except Exception as e:
-                self.logger.error(f"Unexpected error: {e}")
-                break
-    
-        return False
+                    self.logger.error(f"Unexpected error: {e}")
+                    self.cleanup()  # 确保清理资源
+                    break
+                    
+            return False
 
     def read(self):
         if not self.is_running or self.video_stream is None:

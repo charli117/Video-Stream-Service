@@ -99,9 +99,16 @@ async function loadDevices() {
             'Open Analysis': document.getElementById('analysisToggle').parentElement
         };
         
+        // 更新控件显示状态
         Object.keys(elements).forEach(control => {
             if (elements[control]) {
-                elements[control].style.display = controls.includes(control) ? 'block' : 'none';
+                // 始终显示 Refresh Devices 和 Open Analysis 按钮
+                if (control === 'Refresh Devices' || control === 'Open Analysis') {
+                    elements[control].style.display = 'block';
+                } else {
+                    // 其他控件根据 controls 数组决定是否显示
+                    elements[control].style.display = controls.includes(control) ? 'block' : 'none';
+                }
             }
         });
 
@@ -348,6 +355,20 @@ document.addEventListener('DOMContentLoaded', () => {
     updateButtonColor();
 });
 
+window.addEventListener('beforeunload', async function(e) {
+    try {
+        // 在页面刷新前尝试清理资源
+        await fetch('/api/cleanup', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+    } catch (error) {
+        console.error('Cleanup error:', error);
+    }
+});
+
 // 添加防抖函数
 let toggleAnalysisTimeout;
 
@@ -406,27 +427,25 @@ function toggleAnalysis() {
 // 更新按钮颜色的函数
 function updateButtonColor() {
     const analysisToggle = document.getElementById('analysisToggle');
+    const icon = document.createElement('i');
     if (analysisToggle.textContent === 'Close Analysis') {
         analysisToggle.style.backgroundColor = 'red';
+        icon.className = 'fas fa-stop';
+        icon.style.marginRight = '5px';
+        icon.style.display = 'inline-block';
     } else {
         analysisToggle.style.backgroundColor = '';
+        icon.className = 'fas fa-play';
+        icon.style.marginRight = '5px';
+        icon.style.display = 'inline-block';
     }
+    analysisToggle.appendChild(icon);
 }
 
 // 保存按钮状态到 localStorage
 function saveButtonState() {
     const analysisToggle = document.getElementById('analysisToggle');
     localStorage.setItem('analysisToggleState', analysisToggle.textContent);
-}
-
-// 修改现有的 restoreButtonState 函数
-function restoreButtonState() {
-    const analysisToggle = document.getElementById('analysisToggle');
-    const savedAnalysisState = localStorage.getItem('analysisToggleState');
-    if (savedAnalysisState) {
-        analysisToggle.textContent = savedAnalysisState;
-        updateButtonColor();
-    }
 }
 
 // 修改 updateStatus 函数中的相关部分
