@@ -147,6 +147,20 @@ async function loadDevices() {
         currentAudioDevice = data.currentAudioDevice;
         switchButton.disabled = false;
 
+        // 根据 CAMERA_TYPE 显示不同的控件
+        const controls = data.controls;
+        const cameraSelectWrapper = document.getElementById('cameraSelect').parentElement;
+        const audioSelectWrapper = document.getElementById('audioSelect').parentElement;
+        const switchButtonWrapper = document.getElementById('switchButton').parentElement;
+        const refreshButtonWrapper = document.getElementById('refreshButton').parentElement;
+        const analysisToggleWrapper = document.getElementById('analysisToggle').parentElement;
+
+        cameraSelectWrapper.style.display = controls.includes('cameraSelect') ? 'block' : 'none';
+        audioSelectWrapper.style.display = controls.includes('audioSelect') ? 'block' : 'none';
+        switchButtonWrapper.style.display = controls.includes('Switch Devices') ? 'block' : 'none';
+        refreshButtonWrapper.style.display = controls.includes('Refresh Devices') ? 'block' : 'none';
+        analysisToggleWrapper.style.display = controls.includes('Open Analysis') ? 'block' : 'none';
+
     } catch (error) {
         showError('Error loading devices: ' + error.message);
     } finally {

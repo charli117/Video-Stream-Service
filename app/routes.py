@@ -4,6 +4,7 @@ from flask import Blueprint, render_template, Response, jsonify, request
 from app import video_analyzer, audio_analyzer
 from app.camera import Camera
 from app.microphone import Microphone
+from config import InitialConfig
 
 # 创建蓝图
 main_bp = Blueprint('main', __name__)
@@ -34,12 +35,22 @@ def list_devices():
         cameras = Camera.list_cameras()
         audio_devices = Microphone.list_devices()
 
-        return jsonify({
-            'cameras': cameras,
-            'audioDevices': audio_devices,
-            'currentCamera': video_analyzer.video_source,
-            'currentAudioDevice': audio_analyzer.current_device
-        })
+        if InitialConfig.CAMERA_TYPE == 'stream':
+            return jsonify({
+                'cameras': cameras,
+                'audioDevices': audio_devices,
+                'currentCamera': video_analyzer.video_source,
+                'currentAudioDevice': audio_analyzer.current_device,
+                'controls': ['Refresh Devices', 'Open Analysis']
+            })
+        else:
+            return jsonify({
+                'cameras': cameras,
+                'audioDevices': audio_devices,
+                'currentCamera': video_analyzer.video_source,
+                'currentAudioDevice': audio_analyzer.current_device,
+                'controls': ['cameraSelect', 'audioSelect', 'Switch Devices', 'Refresh Devices', 'Open Analysis']
+            })
     except Exception as e:
         logger.error(f"Error listing devices: {str(e)}")
         return jsonify({
@@ -59,16 +70,21 @@ def switch_devices():
         camera_index = int(data.get('camera_index', 0))
         audio_index = int(data.get('audio_index', 0))
 
-        # 使用公共方法替代直接访问
-        if not Camera.is_valid_camera(camera_index):
-            return jsonify({
-                'success': False,
-                'error': f'Camera {camera_index} is not available'
-            }), 400
+        if InitialConfig.CAMERA_TYPE == 'stream':
+            logger.info(f"Switching to stream camera {camera_index}")
+            camera_success = video_analyzer.switch_camera(camera_index)
+            audio_success = True  # Stream cameras do not switch audio devices
+        else:
+            if not Camera.is_valid_camera(camera_index):
+                return jsonify({
+                    'success': False,
+                    'error': f'Camera {camera_index} is not available'
+                }), 400
 
-        logger.info(f"Switching to camera {camera_index} and audio device {audio_index}")
-        camera_success = video_analyzer.switch_camera(camera_index)
-        audio_success = audio_analyzer.switch_audio(audio_index)
+            logger.info(f"Switching to camera {camera_index} and audio device {audio_index}")
+            camera_success = video_analyzer.switch_camera(camera_index)
+            audio_success = audio_analyzer.switch_audio(audio_index)
+
         logger.info(f"Camera switch success: {camera_success}, Audio switch success: {audio_success}")
 
         if not camera_success or not audio_success:
