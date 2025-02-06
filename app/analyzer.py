@@ -545,6 +545,7 @@ class AudioAnalyzer(BaseAnalyzer):
             return
 
         try:
+            self.logger.info("Starting audio analyzer thread...")  # P6645
             # 如果没有设置当前设备，使用默认设备
             if self.current_device is None:
                 available_devices = self.microphone.list_devices()
@@ -565,11 +566,11 @@ class AudioAnalyzer(BaseAnalyzer):
             # 启动父类的线程管理机制
             super().start()
 
-            self.logger.info(f"AudioAnalyzer started successfully with device {self.current_device}")
+            self.logger.info(f"AudioAnalyzer started successfully with device {self.current_device}")  # Pbf3e
 
         except Exception as e:
             self.is_running = False
-            self.logger.error(f"Failed to start audio analyzer: {str(e)}")
+            self.logger.error(f"Failed to start audio analyzer: {str(e)}")  # P457d
             raise
 
     def stop(self):
