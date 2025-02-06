@@ -230,6 +230,7 @@ class StreamCamera:
         self.audio_stream = None
         self.video_stream = None
         self.audio_thread = None
+        self.is_initialized = False
 
     @staticmethod
     def is_valid_camera(index):
