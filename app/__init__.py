@@ -39,12 +39,15 @@ def create_app():
             
             # 设置音频设备索引并启动音频分析器
             audio_analyzer.current_device = device_index  # 先设置设备索引
+            app.logger.info("Starting audio analyzer...")  # P0a33
             audio_analyzer.start()  # 然后启动分析器
+            app.logger.info("Audio analyzer started successfully.")  # Pb2de
         else:
             app.logger.warning("No audio input devices found, audio analysis will be disabled")
             
     except Exception as e:
         app.logger.error(f"Failed to initialize analyzers: {str(e)}")
+        app.logger.error("Failed to start audio analyzer.")  # Pc548
         # 确保即使音频初始化失败，视频功能仍然可用
         if not video_analyzer.is_running:
             app.logger.error("Video analyzer failed to start")
