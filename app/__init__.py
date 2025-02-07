@@ -28,30 +28,27 @@ def create_app():
         # 启动视频分析器
         video_analyzer.start(InitialConfig.DEFAULT_CAMERA_INDEX)
         
-        # 获取可用的音频设备
-        mic = Microphone()
-        mic.set_analysis_enabled(True)  # 确保开启音频提取
-        available_devices = mic.list_devices()
-        
-        if available_devices:
-            # 确保设备列表不为空
-            device_index = available_devices[0]['index']
-            app.logger.info(f"Found {len(available_devices)} audio devices")
-            app.logger.info(f"Using audio device: {available_devices[0]['name']} (index: {device_index})")
+        # 初始化音频设备
+        if 'audio' in InitialConfig.ANALYZER_TYPE:
+            mic = Microphone()
+            mic.start()  # 只初始化设备，不启用分析
+            available_devices = mic.list_devices()
             
-            # 初始化 Microphone 并开启音频分析功能
-            mic.start(device_index=device_index)  # 请根据实际设备调整索引
-
-            audio_analyzer.microphone = mic
-            audio_analyzer.start(device_index=device_index)
-            app.logger.info("Audio analyzer started successfully.")
-        else:
-            app.logger.warning("No audio input devices found, audio analysis will be disabled")
-            
+            if available_devices:
+                device_index = available_devices[0]['index']
+                app.logger.info(f"Using audio device: {available_devices[0]['name']} (index: {device_index})")
+                
+                # 设置音频设备
+                audio_analyzer.current_device = device_index
+                audio_analyzer.microphone = mic
+                
+                # 启动分析器但不开启分析
+                audio_analyzer.start(device_index)
+                app.logger.info("Audio analyzer initialized successfully")
+            else:
+                app.logger.warning("No audio input devices found")
     except Exception as e:
-        app.logger.error(f"Failed to initialize analyzers: {str(e)}")
-        app.logger.error("Failed to start audio analyzer.")  # Pc548
-        # 确保即使音频初始化失败，视频功能仍然可用
+        app.logger.error(f"Failed to initialize audio analyzer: {str(e)}")
         if not video_analyzer.is_running:
             app.logger.error("Video analyzer failed to start")
         

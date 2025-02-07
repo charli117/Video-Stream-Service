@@ -1,7 +1,6 @@
 import os
 import logging
 from app import create_app
-from config import InitialConfig
 
 if __name__ == '__main__':
     # 确保必要的目录存在

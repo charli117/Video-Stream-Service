@@ -19,7 +19,7 @@ class Camera:
         self.height = 0
         self.fps = 0
         self._audio_callback = None  # 添加音频回调属性
-        
+
     def start(self, source=0):
         try:
             if InitialConfig.CAMERA_TYPE == 'local':
@@ -28,14 +28,14 @@ class Camera:
                 self.camera = StreamCamera()
             else:
                 raise ValueError("Invalid CAMERA_TYPE in configuration")
-                
+
             self.camera.start(source)
             # 同步所有必要的属性
             self.is_initialized = self.camera.is_initialized
             self.width = self.camera.width
             self.height = self.camera.height
             self.fps = self.camera.fps
-            
+
         except Exception as e:
             self.logger.error(f"Error starting camera: {str(e)}")
             raise RuntimeError(f"Failed to start camera: {str(e)}")
@@ -249,6 +249,9 @@ class LocalCamera:
 
 class StreamCamera:
     _device_names = {}  # 类变量，用于存储设备名称映射
+    _stream_url_cache = None  # 缓存的流地址
+    _stream_url_expire = 0  # 流地址过期时间
+    _url_lock = threading.Lock()  # URL缓存的线程锁
 
     def __init__(self):
         self.logger = logging.getLogger('StreamCamera')
@@ -266,15 +269,23 @@ class StreamCamera:
         self._audio_callback = None
         self._silence_threshold = 0.02
         self.analysis_enabled = False
+        # 添加重连相关属性
+        self.reconnect_attempts = 0
+        self.max_reconnects = 3
+        self.reconnect_delay = 2
+        self.last_reconnect_time = 0
+        self.url_cache_duration = InitialConfig.STREAM_URL_CACHE_DURATION  # URL缓存1小时
+        self.last_url_fetch_time = 0
+        self.url_fetch_min_interval = InitialConfig.STREAM_URL_MIN_INTERVAL  # 最小请求间隔(秒)
 
-    def set_analysis_enabled(self, enabled):
+    def set_analysis_enabled(self, enabled: bool):
         """设置是否启用分析"""
         self.analysis_enabled = enabled
-        
+
     def set_audio_callback(self, callback):
         """设置音频回调函数"""
         self._audio_callback = callback
-        
+
     def get_info(self):
         """获取摄像头信息"""
         return {
@@ -283,7 +294,7 @@ class StreamCamera:
             'height': self.height,
             'fps': self.fps
         }
-        
+
     def audio_processing_loop(self):
         """音频处理循环"""
         try:
@@ -299,7 +310,7 @@ class StreamCamera:
                     import numpy as np
                     if not isinstance(audio_data, np.ndarray):
                         audio_data = np.array(audio_data)
-                    
+
                     if audio_data.dtype != np.float32:
                         audio_data = audio_data.astype(np.float32)
 
@@ -318,7 +329,7 @@ class StreamCamera:
 
         except Exception as e:
             self.logger.error(f"Audio processing loop error: {str(e)}")
-            
+
     @staticmethod
     def is_valid_camera(index):
         """公共方法：检查摄像头是否有效"""
@@ -352,23 +363,61 @@ class StreamCamera:
             logging.error(f"Error getting stream URL: {e}")
         return []
 
-    @staticmethod
-    def get_stream_url() -> Optional[str]:
-        url = f"https://open.ys7.com/api/lapp/v2/live/address/get"
-        params = {
-            "accessToken": InitialConfig.STREAM_CAMERA_ACCESS_TOKEN,
-            "deviceSerial": InitialConfig.STREAM_CAMERA_SERIAL,
-            "protocol": InitialConfig.STREAM_CAMERA_PROTOCOL,
-            "supportH265": 0
-        }
+    @classmethod
+    def get_stream_url(cls) -> Optional[str]:
+        """获取流媒体地址,带缓存机制"""
+        current_time = time.time()
 
-        try:
-            response = requests.post(url, params=params, verify=False)
-            response.raise_for_status()
-            data = response.json()
-            return data.get('data', {}).get('url')
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"Failed to get stream URL: {e}")
+        with cls._url_lock:
+            # 检查是否有有效的缓存URL
+            if (cls._stream_url_cache and
+                    current_time < cls._stream_url_expire):
+                return cls._stream_url_cache
+
+            # 检查请求频率限制
+            if (current_time - cls._stream_url_expire) < 2:
+                if cls._stream_url_cache:  # 如果有旧缓存,先返回旧的
+                    return cls._stream_url_cache
+                time.sleep(2)  # 强制等待最小间隔
+
+            try:
+                url = "https://open.ys7.com/api/lapp/v2/live/address/get"
+                params = {
+                    "accessToken": InitialConfig.STREAM_CAMERA_ACCESS_TOKEN,
+                    "deviceSerial": InitialConfig.STREAM_CAMERA_SERIAL,
+                    "protocol": InitialConfig.STREAM_CAMERA_PROTOCOL,
+                    "supportH265": 0
+                }
+
+                response = requests.post(url, params=params, verify=False)
+                response.raise_for_status()
+                data = response.json()
+
+                # 解析返回数据中的过期时间
+                expireTime = data.get('data', {}).get('expireTime')
+                if expireTime:
+                    try:
+                        # 将过期时间转换为时间戳
+                        expire_timestamp = time.mktime(time.strptime(expireTime, "%Y-%m-%d %H:%M:%S"))
+                    except:
+                        # 如果转换失败，使用默认缓存时间
+                        expire_timestamp = current_time + cls.url_cache_duration
+                else:
+                    expire_timestamp = current_time + cls.url_cache_duration
+
+                stream_url = data.get('data', {}).get('url')
+                if stream_url:
+                    cls._stream_url_cache = stream_url
+                    cls._stream_url_expire = expire_timestamp
+                    return stream_url
+
+            except Exception as e:
+                logging.error(f"Failed to get stream URL: {e}")
+                if cls._stream_url_cache:  # 如果请求失败但有缓存,返回缓存的URL
+                    return cls._stream_url_cache
+                raise
+
+            return None
 
     def process_stream(self, container, stream):
         """单独处理视频或音频流"""
@@ -386,12 +435,12 @@ class StreamCamera:
         with self._lock:
             # 确保在重新启动前清理旧的连接
             self.cleanup()
-            
+
             # 每次启动都重新获取流地址
             rtmp_url = self.get_stream_url()
             if not rtmp_url:
                 raise ValueError("RTMP URL is required")
-        
+
             retry_count = 0
             max_retries = 3
             while retry_count < max_retries:
@@ -400,11 +449,11 @@ class StreamCamera:
                     self.video_container = av.open(rtmp_url, options={
                         'rtsp_transport': 'tcp',
                         'stimeout': '5000000',
-                        'reconnect': '1',           # 添加重连选项
+                        'reconnect': '1',  # 添加重连选项
                         'reconnect_streamed': '1',  # 流式重连
                         'reconnect_delay_max': '2'  # 最大重连延迟
                     })
-                    
+
                     # 创建音频容器
                     self.audio_container = av.open(rtmp_url, options={
                         'rtsp_transport': 'tcp',
@@ -421,7 +470,7 @@ class StreamCamera:
                     try:
                         self.audio_stream = self.audio_container.streams.audio[0]
                         self.logger.info(f"Audio stream info: {self.audio_stream.rate}Hz, "
-                              f"{self.audio_stream.channels} channels")
+                                         f"{self.audio_stream.channels} channels")
 
                         # 启动音频处理线程
                         self.audio_thread = threading.Thread(target=self.audio_processing_loop)
@@ -442,21 +491,50 @@ class StreamCamera:
                     self.logger.error(f"Unexpected error: {e}")
                     self.cleanup()  # 确保清理资源
                     break
-                    
+
             return False
 
     def read(self):
-        if not self.is_running or self.video_stream is None:
+        if not self.is_running:
             return False, None
 
         try:
+            # 添加重连逻辑
+            if self.video_stream is None:
+                current_time = time.time()
+                if (current_time - self.last_reconnect_time > self.reconnect_delay and
+                        self.reconnect_attempts < self.max_reconnects):
+                    self.reconnect()
+                return False, None
+
             for frame in self.process_stream(self.video_container, self.video_stream):
                 if isinstance(frame, av.VideoFrame):
                     img = frame.to_ndarray(format='bgr24')
                     return True, img
+
         except Exception as e:
-            print(f"Error reading frame: {e}")
+            self.logger.error(f"Error reading frame: {e}")
+            self.video_stream = None
             return False, None
+
+    def reconnect(self):
+        """重新连接流"""
+        try:
+            current_time = time.time()
+            # 检查重连频率
+            if (current_time - self.last_reconnect_time) < self.reconnect_delay:
+                time.sleep(self.reconnect_delay)
+
+            self.cleanup()
+            rtmp_url = self.get_stream_url()  # 使用改进后的get_stream_url方法
+            if not rtmp_url:
+                return False
+
+            # 其他重连代码保持不变...
+
+        except Exception as e:
+            self.logger.error(f"Reconnection failed: {e}")
+            return False
 
     def cleanup(self) -> None:
         self.is_running = False

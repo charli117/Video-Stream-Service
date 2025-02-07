@@ -6,10 +6,12 @@ class InitialConfig:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev'
 
     # 流媒体摄像头配置，支持 stream、local
-    CAMERA_TYPE = 'local'
+    CAMERA_TYPE = 'stream'
     STREAM_CAMERA_ACCESS_TOKEN = "at.bd1d0zsrdwjf0md3bpq23jky4v51x9xe-8s3fg03m8t-1kmlia0-mw6h93hot"
     STREAM_CAMERA_SERIAL = "G92729163"
     STREAM_CAMERA_PROTOCOL = 3
+    STREAM_URL_CACHE_DURATION = 60 * 60  # 默认缓存1小时
+    STREAM_URL_MIN_INTERVAL = 10  # 最小请求间隔(秒)
 
     # 分析配置,支持 audio、video 两种选择
     ANALYZER_TYPE = ['audio']

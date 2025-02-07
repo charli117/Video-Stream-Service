@@ -499,62 +499,24 @@ function saveButtonState() {
 async function updateStatus() {
     try {
         const response = await fetch("/api/status");
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
         const status = await response.json();
 
-        // 更新分析按钮状态时增加判断
-        const analysisToggle = document.getElementById('analysisToggle');
-        if (analysisToggle) {
-            const currentState = analysisToggle.textContent === 'Close Analysis';
-            // 只在状态确实发生变化时才更新
-            if (currentState !== status.analysis_enabled) {
-                analysisToggle.innerHTML = '<i class="fas fa-sync"></i> ' + (status.analysis_enabled ? 'Close Analysis' : 'Open Analysis');
-                updateButtonColor();
-                saveButtonState();
-            }
-        }
-
-        // 更新帧变化历史记录
-        if (status.frame_changes && status.frame_changes.length > 0) {
-            status.frame_changes.forEach(change => {
-                const existingChange = frameChangesHistory.find(h => h.time === change.time);
-                if (!existingChange) {
-                    frameChangesHistory.unshift(change);
-                }
-            });
-            frameChangesHistory = frameChangesHistory.slice(0, 50);
-        }
-
-        // 更新音频变化历史记录
-        if (status.audio_changes && status.audio_changes.length > 0) {
-            status.audio_changes.forEach(change => {
-                const existingChange = audioChangesHistory.find(h => h.time === change.time);
-                if (!existingChange) {
-                    audioChangesHistory.unshift(change);
-                }
-            });
-            audioChangesHistory = audioChangesHistory.slice(0, 50);
-        }
-
-        // 更新状态显示
+        // 获取状态显示元素
         const statusDiv = document.getElementById('status');
+        if (!statusDiv) return;
 
+        // 首先清空当前状态显示
+        let statusHtml = '';
+
+        // 检查是否有错误
         if (status.error) {
-            statusDiv.innerHTML = `
-                <p class="error">Error: ${status.error}</p>
-            `;
+            statusHtml = `<p class="error">Error: ${status.error}</p>`;
+            statusDiv.innerHTML = statusHtml;
             return;
         }
 
-        // 更新分析按钮状态
-        if (analysisToggle) {
-            analysisToggle.innerHTML = status.analysis_enabled ? '<i class="fas fa-stop"></i> Close Analysis' : '<i class="fas fa-play"></i> Open Analysis';
-            updateButtonColor();
-        }
-
-        let statusHtml = `
+        // 添加基本状态信息
+        statusHtml = `
             <p>Status: ${status.is_running ? 'Running' : 'Stopped'}</p>
             <p>Camera: ${status.current_camera_name || 'None'}</p>
             <p>Audio: ${status.current_audio_name || 'None'}</p>
@@ -563,33 +525,74 @@ async function updateStatus() {
             <p>Analysis: ${status.analysis_enabled ? 'Enabled' : 'Disabled'}</p>
         `;
 
-        // 始终显示帧变化日志，移除 if (status.analysis_enabled) 判断
+        // 检查音频错误并添加错误提示
+        if (status.audio_error) {
+            statusHtml += `
+                <div class="error">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    音频错误: ${status.audio_error.message}
+                </div>
+            `;
+            
+            // 禁用分析按钮
+            const analysisToggle = document.getElementById('analysisToggle');
+            if (analysisToggle) {
+                analysisToggle.disabled = true;
+                analysisToggle.title = status.audio_error.message;
+            }
+        }
+
+        // 更新分析按钮状态
+        const analysisToggle = document.getElementById('analysisToggle');
+        if (analysisToggle) {
+            const currentState = analysisToggle.textContent === 'Close Analysis';
+            if (currentState !== status.analysis_enabled) {
+                analysisToggle.innerHTML = '<i class="fas fa-sync"></i> ' + 
+                    (status.analysis_enabled ? 'Close Analysis' : 'Open Analysis');
+                updateButtonColor();
+                saveButtonState();
+            }
+        }
+
+        // 更新历史记录
+        if (status.frame_changes?.length > 0) {
+            status.frame_changes.forEach(change => {
+                if (!frameChangesHistory.find(h => h.time === change.time)) {
+                    frameChangesHistory.unshift(change);
+                }
+            });
+            frameChangesHistory = frameChangesHistory.slice(0, 50);
+        }
+
+        if (status.audio_changes?.length > 0) {
+            status.audio_changes.forEach(change => {
+                if (!audioChangesHistory.find(h => h.time === change.time)) {
+                    audioChangesHistory.unshift(change);
+                }
+            });
+            audioChangesHistory = audioChangesHistory.slice(0, 50);
+        }
+
+        // 添加视频变化日志
         statusHtml += `
             <div class="changes-log">
                 <h3>Video Changes Log</h3>
                 <div class="log-entries">
-        `;
-        
-        if (frameChangesHistory.length > 0) {
-            frameChangesHistory.forEach(change => {
-                const date = new Date(change.time * 1000);
-                const timeString = date.toLocaleString('zh-CN');
-                statusHtml += `
-                    <div class="log-entry">
-                        <a href="javascript:void(0)" onclick="showImageViewer('${change.image_url}')" class="change-time">
-                            <i class="fas fa-camera"></i>
-                            ${timeString}
-                        </a>
-                    </div>
-                `;
-            });
-        } else {
-            statusHtml += `
-                <p class="no-changes">No frame changes detected</p>
-            `;
-        }
-
-        statusHtml += `
+                    ${frameChangesHistory.length > 0 ? 
+                        frameChangesHistory.map(change => {
+                            const date = new Date(change.time * 1000);
+                            const timeString = date.toLocaleString('zh-CN');
+                            return `
+                                <div class="log-entry">
+                                    <a href="javascript:void(0)" onclick="showImageViewer('${change.image_url}')" class="change-time">
+                                        <i class="fas fa-camera"></i>
+                                        ${timeString}
+                                    </a>
+                                </div>
+                            `;
+                        }).join('') :
+                        '<p class="no-changes">No frame changes detected</p>'
+                    }
                 </div>
             </div>
         `;
@@ -599,62 +602,33 @@ async function updateStatus() {
             <div class="changes-log">
                 <h3>Audio Changes Log</h3>
                 <div class="log-entries">
-        `;
-        
-        if (audioChangesHistory.length > 0) {
-            audioChangesHistory.forEach(change => {
-                const date = new Date(change.time * 1000);
-                const timeString = date.toLocaleString('zh-CN');
-                statusHtml += `
-                    <div class="log-entry">
-                        <a href="javascript:void(0)" onclick="playAudio('${change.audio_url}')" class="change-time">
-                            <i class="fas fa-volume-up"></i>
-                            ${timeString}
-                        </a>
-                    </div>
-                `;
-            });
-        } else {
-            statusHtml += `
-                <p class="no-changes">No audio changes detected</p>
-            `;
-        }
-
-        statusHtml += `
+                    ${audioChangesHistory.length > 0 ?
+                        audioChangesHistory.map(change => {
+                            const date = new Date(change.time * 1000);
+                            const timeString = date.toLocaleString('zh-CN');
+                            return `
+                                <div class="log-entry">
+                                    <a href="javascript:void(0)" onclick="playAudioSegment('${change.audio_url}')" class="change-time">
+                                        <i class="fas fa-volume-up"></i>
+                                        ${timeString}
+                                    </a>
+                                </div>
+                            `;
+                        }).join('') :
+                        '<p class="no-changes">No audio changes detected</p>'
+                    }
                 </div>
             </div>
         `;
 
+        // 如果摄像头未初始化，添加警告
+        if (!status.camera_info.initialized) {
+            statusHtml += `<p class="warning">Camera not initialized</p>`;
+        }
+
+        // 更新整个状态显示
         statusDiv.innerHTML = statusHtml;
 
-        // 如果摄像头未初始化，显示警告
-        if (!status.camera_info.initialized) {
-            statusDiv.innerHTML += `
-                <p class="warning">Camera not initialized</p>
-            `;
-        }
-
-        // 更新音频变化记录
-        if (status.audio_changes && status.audio_changes.length > 0) {
-            const audioLogEntries = document.getElementById('audioLogEntries');
-            let audioHtml = '';
-            
-            status.audio_changes.forEach(change => {
-                const date = new Date(change.time * 1000);
-                const timeString = date.toLocaleString('zh-CN');
-                audioHtml += `
-                    <div class="log-entry">
-                        <a href="javascript:void(0)" onclick="playAudioSegment('${change.audio_url}')" class="change-time">
-                            <i class="fas fa-volume-up"></i>
-                            ${timeString}
-                        </a>
-                    </div>
-                `;
-            });
-            
-            audioLogEntries.innerHTML = audioHtml;
-        }
-        
     } catch (error) {
         console.error('Error updating status:', error);
     }

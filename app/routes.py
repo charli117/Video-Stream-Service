@@ -178,6 +178,11 @@ def get_status():
             except Exception as e:
                 logger.error(f"Error getting frame changes: {str(e)}")
 
+        # 添加音频错误状态
+        status['audio_error'] = None
+        if hasattr(audio_analyzer, 'error_state'):
+            status['audio_error'] = audio_analyzer.error_state
+
         return jsonify(status)
 
     except Exception as e:
@@ -204,9 +209,7 @@ def start_analysis():
     try:
         data = request.get_json()
         enabled = data.get('enabled', False)
-        
         success = True
-        video_success = audio_success = True
         
         if 'video' in InitialConfig.ANALYZER_TYPE:
             video_success = video_analyzer.toggle_analysis(enabled)
@@ -220,13 +223,13 @@ def start_analysis():
                 try:
                     audio_analyzer.start(audio_analyzer.current_device)
                 except Exception as e:
-                    logger.error(f"Failed to start audio analyzer before toggling: {str(e)}")
-                    audio_success = False
+                    logger.error(f"Failed to start audio analyzer: {str(e)}")
+                    success = False
+            
             if audio_analyzer.is_running:
-                audio_success = audio_analyzer.toggle_analysis(enabled)
-            success &= audio_success
-            if not audio_success:
-                logger.error("Failed to toggle audio analysis")
+                # 同时设置 AudioAnalyzer 和 Microphone 的分析状态
+                audio_analyzer.toggle_analysis(enabled)
+                audio_analyzer.microphone.set_analysis_enabled(enabled)
                 
         if success:
             return jsonify({

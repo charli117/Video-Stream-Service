@@ -16,7 +16,7 @@ from app.camera import Camera
 from app.microphone import Microphone
 from config import InitialConfig
 from logging.handlers import RotatingFileHandler
-import librosa.feature as librosa_feature
+# import librosa.feature as librosa_feature
 from skimage.metrics import structural_similarity as ssim
 
 
@@ -87,6 +87,7 @@ class BaseAnalyzer:
         """切换分析状态"""
         with self._status_lock:
             try:
+                self.logger.info(f"Toggling analysis to: {enabled}")  # 添加日志
                 # 检查运行状态
                 if not self.is_running:
                     self.logger.warning("Cannot toggle analysis when analyzer is not running")
@@ -94,6 +95,7 @@ class BaseAnalyzer:
                     
                 # 检查状态是否需要改变
                 if self.analysis_enabled == enabled:
+                    self.logger.info(f"Analysis already {enabled}, no change needed")  # 添加日志
                     return True
                     
                 previous_state = self.analysis_enabled
@@ -297,6 +299,7 @@ class BaseAnalyzer:
     def _llm_analyze(self, data):
         """LLM分析方法"""
         try:
+            result = None
             # 根据数据类型判断处理方式
             if isinstance(data, np.ndarray):
                 if len(data.shape) == 3:  # 视频帧数据
@@ -305,17 +308,16 @@ class BaseAnalyzer:
                     result = self._save_base64_image(data)
                 else:  # 音频数据
                     extension = '.wav'
-                    self.logger.error("======")
                     if data.size > 0:
                         self.cleanup_old_files(extension)
                         result = self._save_audio_file(data)
 
-                if result is None:
-                    self.logger.error("Failed to save data")
-                    return
+            if result is None:
+                self.logger.error("Failed to save data")
+                return
 
-                self.logger.info(f"Data saved: {result['filepath']}")
-                # TODO: 实际的LLM服务调用代码
+            self.logger.info(f"Data saved: {result['filepath']}")
+            # TODO: 实际的LLM服务调用代码
 
         except Exception as e:
             self.logger.error(f"Error in LLM analysis: {str(e)}")
@@ -405,6 +407,9 @@ class VideoAnalyzer(BaseAnalyzer):
 
     def generate_frames(self):
         """生成视频流"""
+        consecutive_errors = 0
+        max_consecutive_errors = 5
+        
         while self.is_running:
             try:
                 if not self.camera.is_initialized:
@@ -414,10 +419,15 @@ class VideoAnalyzer(BaseAnalyzer):
                 
                 ret, frame = self.camera.read()
                 if not ret or frame is None:
-                    self.logger.error("Failed to read frame from camera")
+                    consecutive_errors += 1
+                    if consecutive_errors >= max_consecutive_errors:
+                        self.logger.error("Too many consecutive errors, stopping analyzer")
+                        self.stop()
+                        break
                     time.sleep(0.1)
                     continue
                 
+                consecutive_errors = 0  # 重置错误计数
                 frame = self._resize_frame(frame)
                 if frame is None:
                     self.logger.error("Failed to resize frame")
@@ -587,7 +597,7 @@ class AudioAnalyzer(BaseAnalyzer):
         try:
             self.logger.info("Starting audio analyzer thread...")
             # 如果传入设备索引，则使用传入值
-            if (device_index is not None):
+            if device_index is not None:
                 self.current_device = device_index
             elif self.current_device is None:
                 available_devices = self.microphone.list_devices()
@@ -620,30 +630,75 @@ class AudioAnalyzer(BaseAnalyzer):
     def switch_audio(self, device_index):
         """切换音频输入设备"""
         try:
-            self.stop()
-            time.sleep(0.5)
+            self.logger.info(f"Attempting to switch audio device to index: {device_index}")
+
+            # 停止当前分析
+            was_analyzing = self.analysis_enabled
+            self.analysis_enabled = False
+
+            # 释放旧设备资源
+            if self.microphone:
+                self.microphone.release()
+
+            time.sleep(0.5)  # 等待资源释放
+
+            # 初始化新设备
+            self.current_device = device_index
             self.microphone.start(device_index)
-            self.current_device = device_index  # 更新当前设备索引
+
+            # 恢复之前的分析状态
+            if was_analyzing:
+                self.analysis_enabled = True
+
             return True
+
         except Exception as e:
             self.logger.error(f"Error switching audio device: {str(e)}")
             return False
-            
+
     def generate_audio(self):
-        """生成音频流，并进行静默检测和分割"""
+        """生成音频流"""
         import numpy as np
         active_segment = []
         is_silent = True
+        retry_count = 0
+        max_retries = 3
 
         while self.is_running:
             try:
-                success, raw_data = self.microphone.read()
-                if not success or raw_data is None:
-                    self.logger.warning("[generate_audio] 无法读取到音频数据")
-                    time.sleep(0.01)
+                if not self.microphone.is_initialized:
+                    self.logger.warning("[generate_audio] 麦克风未初始化，尝试初始化...")
+                    if retry_count >= max_retries:
+                        # 达到最大重试次数,设置错误状态
+                        self.error_state = {
+                            'code': 'AUDIO_INIT_FAILED',
+                            'message': '无法初始化音频设备,请检查设备连接'
+                        }
+                        self.logger.error(f"[generate_audio] 连续{max_retries}次初始化失败,停止重试")
+                        break
+
+                    retry_count += 1
+                    self.microphone.start(self.current_device)
+                    time.sleep(1)
                     continue
 
-                # 确保数据为 np.ndarray 且为 float32 类型
+                success, raw_data = self.microphone.read()
+
+                if not success or raw_data is None:
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        self.error_state = {
+                            'code': 'AUDIO_READ_FAILED',
+                            'message': '无法读取音频数据,请检查设备是否正常工作'
+                        }
+                        self.logger.error(f"[generate_audio] 连续{max_retries}次无法读取音频数据")
+                        break
+                    continue
+
+                # 成功读取数据后重置重试计数
+                retry_count = 0
+
+                # 处理音频数据，确保数据为 np.ndarray 且为 float32 类型
                 if not isinstance(raw_data, np.ndarray):
                     audio_data = np.array(raw_data)
                     self.logger.info(f"[generate_audio] 转换 raw_data 至 numpy.ndarray, shape: {audio_data.shape}")
@@ -676,10 +731,10 @@ class AudioAnalyzer(BaseAnalyzer):
                         is_silent = True
                     else:
                         self.logger.debug("[generate_audio] 静默状态，跳过当前数据")
-
+                
             except Exception as e:
                 self.logger.error(f"Error generating audio: {str(e)}")
-            time.sleep(0.01)
+                time.sleep(0.1)
 
     def stop(self):
         """停止音频分析器"""
@@ -766,3 +821,4 @@ class AudioAnalyzer(BaseAnalyzer):
     #
     #     except Exception as e:
     #         self.logger.error(f"Error integrating audio processing: {str(e)}")
+    #         return False
