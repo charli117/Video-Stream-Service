@@ -215,8 +215,8 @@ def start_analysis():
                 logger.error("Failed to toggle video analysis")
                 
         if 'audio' in InitialConfig.ANALYZER_TYPE:
-            # 如果音频分析器尚未启动，先启动它
-            if not audio_analyzer.is_running:
+            # 仅在启用分析时启动音频分析器
+            if enabled and not audio_analyzer.is_running:
                 try:
                     audio_analyzer.start(audio_analyzer.current_device)
                 except Exception as e:

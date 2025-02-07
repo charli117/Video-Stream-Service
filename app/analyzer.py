@@ -267,8 +267,7 @@ class BaseAnalyzer:
         """线程包装器，用于异常处理和状态管理"""
         try:
             while self.is_running:
-                if self.analysis_enabled or thread_name != "analyze":  # 允许非分析线程继续运行
-                    target_func()
+                target_func()
                 time.sleep(0.01)  # 避免空循环占用CPU
         except Exception as e:
             self.logger.error(f"{thread_name} thread error: {str(e)}")
@@ -306,8 +305,10 @@ class BaseAnalyzer:
                     result = self._save_base64_image(data)
                 else:  # 音频数据
                     extension = '.wav'
-                    self.cleanup_old_files(extension)
-                    result = self._save_audio_file(data)
+                    self.logger.error("======")
+                    if data.size > 0:
+                        self.cleanup_old_files(extension)
+                        result = self._save_audio_file(data)
 
                 if result is None:
                     self.logger.error("Failed to save data")
@@ -568,7 +569,8 @@ class AudioAnalyzer(BaseAnalyzer):
     def __init__(self):
         super().__init__()
         self.logger = logging.getLogger('AudioAnalyzer')
-        self.audio_queue = Queue(maxsize=10)
+        # 增大队列容量
+        self.audio_queue = Queue(maxsize=50)
         self.last_audio = None
         self.sample_rate = InitialConfig.AUDIO_SAMPLE_RATE
         self.chunk_size = InitialConfig.AUDIO_CHUNK_SIZE
@@ -585,7 +587,7 @@ class AudioAnalyzer(BaseAnalyzer):
         try:
             self.logger.info("Starting audio analyzer thread...")
             # 如果传入设备索引，则使用传入值
-            if device_index is not None:
+            if (device_index is not None):
                 self.current_device = device_index
             elif self.current_device is None:
                 available_devices = self.microphone.list_devices()
@@ -628,13 +630,73 @@ class AudioAnalyzer(BaseAnalyzer):
             return False
             
     def generate_audio(self):
-        """生成音频流"""
+        """生成音频流，并进行静默检测和分割"""
+        active_segment = []  # 存储当前活动音频片段
+        is_silent = True  # 初始状态为静默
+
         while self.is_running:
             try:
-                audio_data = self.microphone.read()
-                if audio_data is not None:
-                    if not self.audio_queue.full() and self.analysis_enabled:
-                        self.audio_queue.put(audio_data.copy())
+                result = self.microphone.read()
+                self.logger.info(f"[generate_audio] Microphone read result: {result}")
+
+                if result is not None:
+                    if isinstance(result, tuple):
+                        raw_data = result[1] if len(result) >= 2 else result[0]
+                        self.logger.info(f"[generate_audio] Extracted tuple element as raw_data")
+                    else:
+                        raw_data = result
+                        self.logger.info(f"[generate_audio] Raw data is not a tuple")
+
+                    if not isinstance(raw_data, np.ndarray):
+                        audio_data = np.array(raw_data)
+                        self.logger.info(f"[generate_audio] Converted raw_data to np.ndarray, shape: {audio_data.shape}")
+                    else:
+                        audio_data = raw_data
+                        self.logger.info(f"[generate_audio] Audio data is already np.ndarray, shape: {audio_data.shape}")
+
+                    # 确保音频数据是float32类型
+                    if audio_data.dtype != np.float32:
+                        audio_data = audio_data.astype(np.float32)
+
+                    # 规范化音频数据
+                    if audio_data.max() > 1.0:
+                        audio_data = audio_data / 32768.0
+
+                    # 计算当前音频数据的平均幅度
+                    amplitude = np.abs(audio_data).mean()
+
+                    if amplitude > InitialConfig.AUDIO_CHANGE_THRESHOLD:
+                        # 检测到非静默音频，添加到当前片段
+                        active_segment.append(audio_data)
+                        is_silent = False
+                        self.logger.info(f"[generate_audio] Non-silent audio detected, adding to segment")
+                    else:
+                        # 检测到静默音频
+                        if not is_silent and active_segment:
+                            # 如果之前有活动片段，则完成片段并放入队列
+                            complete_segment = np.concatenate(active_segment, axis=0)
+                            self.logger.info(f"[generate_audio] Silent audio detected, completing segment")
+
+                            if self.analysis_enabled:
+                                try:
+                                    # 增加对队列大小的判断
+                                    if self.audio_queue.qsize() < self.audio_queue.maxsize:
+                                        self.audio_queue.put_nowait(np.copy(complete_segment))
+                                        self.logger.info(f"[generate_audio] Complete audio segment pushed to queue")
+                                    else:
+                                        self.logger.warning(f"[generate_audio] Audio queue is full, skipping audio data")
+                                except Exception as put_err:
+                                    self.logger.warning(f"[generate_audio] Audio queue is full, skipping audio data: {put_err}")
+
+                            # 重置活动片段
+                            active_segment = []
+                            is_silent = True
+                        else:
+                            self.logger.debug(f"[generate_audio] Still in silent state, skipping")
+
+                else:
+                    self.logger.warning(f"[generate_audio] No data read from microphone")
+
             except Exception as e:
                 self.logger.error(f"Error generating audio: {str(e)}")
             time.sleep(0.01)
@@ -651,60 +713,56 @@ class AudioAnalyzer(BaseAnalyzer):
         super().stop()
             
     def _analyze_loop(self):
-        """音频分析循环"""
-        change_segments = []
+        """音频分析循环，从队列中获取音频片段并进行异步分析"""
         while self.is_running:
             try:
-                if not self.audio_queue.empty() and self.analysis_enabled:
-                    audio_data = self.audio_queue.get()
+                if not self.analysis_enabled:
+                    time.sleep(0.05)
+                    continue
 
-                    if self.last_audio is not None:
-                        if self._detect_audio_change(audio_data):
-                            self.logger.info("Significant audio change detected")
-                            change_segments.append(audio_data.copy())
-                            
-                            if len(change_segments) >= 5:
-                                # 直接发送最新的音频片段到 change_queue
-                                if self.change_queue.full():
-                                    try:
-                                        self.change_queue.get_nowait()
-                                    except:
-                                        pass
-                                self.change_queue.put(change_segments[-1])
-                                change_segments = []
+                # 增加对队列大小的监控
+                if self.audio_queue.qsize() > self.audio_queue.maxsize * 0.8:
+                    self.logger.warning(f"Audio queue is almost full: {self.audio_queue.qsize()}/{self.audio_queue.maxsize}, pausing audio capture")
+                    time.sleep(1)  # 暂停音频采集
+                    continue
+
+                if not self.audio_queue.empty():
+                    audio_data = self.audio_queue.get()
                     
-                    self.last_audio = audio_data.copy()
-                    
+                    # 异步调用LLM服务
+                    Thread(target=self._llm_analyze, args=(audio_data,)).start()
+                    self.logger.info(f"[analyze_loop] Audio analysis dispatched to LLM")
+
             except Exception as e:
                 self.logger.error(f"Error in audio analysis: {str(e)}")
-            time.sleep(0.01)
+            time.sleep(0.1)
             
-    def _detect_audio_change(self, audio_data):
-        """Detect audio changes using MFCC features"""
-        if self.last_audio is None or not isinstance(audio_data, np.ndarray):
-            return False
+    # def _detect_audio_change(self, audio_data):
+    #     """Detect audio changes using MFCC features"""
+    #     if self.last_audio is None or not isinstance(audio_data, np.ndarray):
+    #         return False
             
-        try:
-            # 确保音频数据是浮点型
-            last_audio = self.last_audio.astype(np.float32).flatten()
-            current_audio = audio_data.astype(np.float32).flatten()
+    #     try:
+    #         # 确保音频数据是浮点型
+    #         last_audio = self.last_audio.astype(np.float32).flatten()
+    #         current_audio = audio_data.astype(np.float32).flatten()
             
-            # 使用完整的导入路径计算音频特征
-            mfcc1 = librosa_feature.mfcc(y=last_audio, sr=self.sample_rate)
-            mfcc2 = librosa_feature.mfcc(y=current_audio, sr=self.sample_rate)
+    #         # 使用完整的导入路径计算音频特征
+    #         mfcc1 = librosa_feature.mfcc(y=last_audio, sr=self.sample_rate)
+    #         mfcc2 = librosa_feature.mfcc(y=current_audio, sr=self.sample_rate)
             
-            # Calculate similarity
-            similarity = np.corrcoef(mfcc1.flatten(), mfcc2.flatten())[0, 1]
+    #         # Calculate similarity
+    #         similarity = np.corrcoef(mfcc1.flatten(), mfcc2.flatten())[0, 1]
             
-            # Add detailed logging
-            if similarity < self.threshold:
-                self.logger.info(f"Audio change detected - Similarity: {similarity:.3f} (Threshold: {self.threshold})")
+    #         # Add detailed logging
+    #         if similarity < self.threshold:
+    #             self.logger.info(f"Audio change detected - Similarity: {similarity:.3f} (Threshold: {self.threshold})")
             
-            return similarity < self.threshold
+    #         return similarity < self.threshold
             
-        except Exception as e:
-            self.logger.error(f"Error in audio change detection: {str(e)}")
-            return False
+    #     except Exception as e:
+    #         self.logger.error(f"Error in audio change detection: {str(e)}")
+    #         return False
 
     def process_stream_audio(self, audio_data):
         """处理流式音频数据"""

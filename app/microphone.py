@@ -1,6 +1,7 @@
 import logging
 import sounddevice as sd
 from config import InitialConfig
+import time
 
 
 class Microphone:
@@ -68,50 +69,60 @@ class Microphone:
 
     def start(self, device_index=None):
         """初始化音频设备"""
-        try:
-            if device_index is not None:
-                self.current_device = device_index
+        max_retries = 3
+        retry_delay = 1  # seconds
 
-            # 先检查设备是否有效
-            if not self._is_valid_device(self.current_device):
-                raise RuntimeError(f"Audio device {self.current_device} is not available")
+        for attempt in range(max_retries):
+            try:
+                if device_index is not None:
+                    self.current_device = device_index
 
-            # 如果已经初始化，先释放
-            if self.stream is not None:
-                self.release()
+                # 先检查设备是否有效
+                if not self._is_valid_device(self.current_device):
+                    raise RuntimeError(f"Audio device {self.current_device} is not available")
 
-            # 获取设备信息
-            device_info = sd.query_devices(self.current_device)
-            self.channels = min(device_info['max_input_channels'], InitialConfig.AUDIO_CHANNELS)
-            self.sample_rate = int(device_info['default_samplerate'])
+                # 如果已经初始化，先释放
+                if self.stream is not None:
+                    self.release()
 
-            self.logger.info(f"Initializing audio device {self.current_device}")
-            self.stream = sd.InputStream(
-                device=self.current_device,
-                channels=self.channels,
-                samplerate=self.sample_rate,
-                blocksize=self.chunk_size
-            )
-            self.stream.start()
+                # 获取设备信息
+                device_info = sd.query_devices(self.current_device)
+                self.channels = min(device_info['max_input_channels'], InitialConfig.AUDIO_CHANNELS)
+                self.sample_rate = int(device_info['default_samplerate'])
 
-            self.is_initialized = True
-            self.logger.info(f"Audio device initialized successfully: {self.channels} channels @ {self.sample_rate}Hz")
+                self.logger.info(f"Initializing audio device {self.current_device}, attempt {attempt + 1}")
+                self.stream = sd.InputStream(
+                    device=self.current_device,
+                    channels=self.channels,
+                    samplerate=self.sample_rate,
+                    blocksize=self.chunk_size
+                )
+                self.stream.start()
 
-        except Exception as e:
-            self.logger.error(f"Error initializing audio device: {str(e)}")
-            self.is_initialized = False
-            if self.stream is not None:
-                self.stream.close()
-                self.stream = None
-            raise
+                self.is_initialized = True
+                self.logger.info(f"Audio device initialized successfully: {self.channels} channels @ {self.sample_rate}Hz")
+                return  # Initialization successful, exit the retry loop
 
-    def read(self, frames=None):
+            except Exception as e:
+                self.logger.error(f"Error initializing audio device (attempt {attempt + 1}/{max_retries}): {str(e)}")
+                self.is_initialized = False
+                if self.stream is not None:
+                    self.stream.close()
+                    self.stream = None
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)  # Wait before the next retry
+                else:
+                    raise  # Re-raise the exception if all retries failed
+
+    def read(self, frames=None, chunk_size=None):
         """读取音频数据"""
         if not self.is_initialized or self.stream is None:
             return False, None
 
         try:
-            data, overflowed = self.stream.read(frames if frames else self.chunk_size)
+            # 如果没有指定 frames，则使用 chunk_size，如果 chunk_size 也没有指定，则使用 self.chunk_size
+            read_frames = frames if frames else chunk_size if chunk_size else self.chunk_size
+            data, overflowed = self.stream.read(read_frames)
             if overflowed:
                 self.logger.warning("Audio input buffer overflowed")
             return True, data

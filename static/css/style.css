@@ -54,9 +54,25 @@ body {
     align-items: center;
 }
 
+.audio-select {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    align-items: center;
+}
+
 .select-wrapper {
     flex: 1;
     min-width: 50px;
+}
+
+.select-wrapper select {
+    width: 100% !important;
+    padding: 10px !important;
+    border: 1px solid #ddd !important;
+    border-radius: 6px !important;
+    font-size: 14px !important;
+    background-color: white !important;
 }
 
 .button-group {
