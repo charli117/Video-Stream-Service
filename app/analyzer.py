@@ -701,7 +701,6 @@ class AudioAnalyzer(BaseAnalyzer):
                 # 处理音频数据，确保数据为 np.ndarray 且为 float32 类型
                 if not isinstance(raw_data, np.ndarray):
                     audio_data = np.array(raw_data)
-                    self.logger.info(f"[generate_audio] 转换 raw_data 至 numpy.ndarray, shape: {audio_data.shape}")
                 else:
                     audio_data = raw_data
 
