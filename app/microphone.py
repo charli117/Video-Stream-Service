@@ -1,6 +1,5 @@
 import time
 import logging
-import traceback
 import pyaudio
 import sounddevice as sd
 from config import InitialConfig
@@ -264,7 +263,6 @@ class Microphone:
                     self.audio = None
                 
             self.is_initialized = False
-            self.logger.info("Audio device released")
-            
+
         except Exception as e:
             self.logger.error(f"Error releasing audio device: {str(e)}")
