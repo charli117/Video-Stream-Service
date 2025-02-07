@@ -115,26 +115,43 @@ def update_device_names():
 def get_status():
     """获取当前状态"""
     try:
+        # 检查设备就绪状态
+        devices_ready = True
         current_camera_index = str(video_analyzer.video_source)
         current_audio_index = str(audio_analyzer.current_device)
 
+        # 根据配置的分析器类型检查设备状态
+        if 'video' in InitialConfig.ANALYZER_TYPE:
+            video_initialized = (video_analyzer.camera and 
+                               hasattr(video_analyzer.camera, 'is_initialized') and 
+                               video_analyzer.camera.is_initialized)
+            devices_ready &= video_initialized
+            
+        if 'audio' in InitialConfig.ANALYZER_TYPE:
+            audio_initialized = (audio_analyzer.microphone and 
+                               hasattr(audio_analyzer.microphone, 'is_initialized') and 
+                               audio_analyzer.microphone.is_initialized)
+            devices_ready &= audio_initialized
+
         # 初始化基本状态信息
         status = {
-            'is_running': video_analyzer.is_running,
+            'devices_ready': devices_ready,  # 设备就绪状态
+            'is_running': video_analyzer.is_running if 'video' in InitialConfig.ANALYZER_TYPE else audio_analyzer.is_running,
             'current_camera': video_analyzer.video_source,
             'current_camera_name': Camera.get_device_name(current_camera_index),
             'current_audio_device': audio_analyzer.current_device,
             'current_audio_name': Microphone.get_device_name(current_audio_index),
-            'fps': video_analyzer.fps,
+            'fps': video_analyzer.fps if 'video' in InitialConfig.ANALYZER_TYPE else 0,
             'camera_info': {
-                'initialized': False,
+                'initialized': video_initialized if 'video' in InitialConfig.ANALYZER_TYPE else False,
                 'width': 0,
                 'height': 0,
                 'fps': 0,
                 'name': Camera.get_device_name(current_camera_index)
             },
-            'analysis_enabled': video_analyzer.analysis_enabled,
-            'frame_changed': not video_analyzer.change_queue.empty(),
+            'analysis_enabled': (video_analyzer.analysis_enabled if 'video' in InitialConfig.ANALYZER_TYPE 
+                               else audio_analyzer.analysis_enabled),
+            'frame_changed': not video_analyzer.change_queue.empty() if 'video' in InitialConfig.ANALYZER_TYPE else False,
             'frame_changes': [],
             'audio_changes': []
         }

@@ -248,6 +248,7 @@ class LocalCamera:
 
 
 class StreamCamera:
+    url_cache_duration = InitialConfig.STREAM_URL_CACHE_DURATION
     _device_names = {}  # 类变量，用于存储设备名称映射
     _stream_url_cache = None  # 缓存的流地址
     _stream_url_expire = 0  # 流地址过期时间
@@ -274,9 +275,6 @@ class StreamCamera:
         self.max_reconnects = 3
         self.reconnect_delay = 2
         self.last_reconnect_time = 0
-        self.url_cache_duration = InitialConfig.STREAM_URL_CACHE_DURATION  # URL缓存1小时
-        self.last_url_fetch_time = 0
-        self.url_fetch_min_interval = InitialConfig.STREAM_URL_MIN_INTERVAL  # 最小请求间隔(秒)
 
     def set_analysis_enabled(self, enabled: bool):
         """设置是否启用分析"""
@@ -296,7 +294,7 @@ class StreamCamera:
         }
 
     def audio_processing_loop(self):
-        """音频处理循环"""
+        """改进的音频处理循环"""
         try:
             for frame in self.process_stream(self.audio_container, self.audio_stream):
                 if not self.is_running:
@@ -306,29 +304,31 @@ class StreamCamera:
                     continue
 
                 try:
+                    # 转换音频帧为numpy数组并进行处理
                     audio_data = frame.to_ndarray()
-                    import numpy as np
-                    if not isinstance(audio_data, np.ndarray):
-                        audio_data = np.array(audio_data)
-
+                    
+                    # 确保数据类型为float32
                     if audio_data.dtype != np.float32:
                         audio_data = audio_data.astype(np.float32)
-
+                    
+                    # 归一化
                     if audio_data.max() > 1.0:
                         audio_data = audio_data / 32768.0
-
-                    # 检查静默阈值
-                    if np.abs(audio_data).mean() > InitialConfig.AUDIO_CHANGE_THRESHOLD:
-                        if self._audio_callback:
-                            self._audio_callback(audio_data)
-                    else:
-                        self.logger.debug("检测到静默音频，忽略处理")
+                    
+                    # 保证数据形状正确
+                    if audio_data.ndim == 1:
+                        audio_data = audio_data.reshape(-1, 1)
+                    
+                    # 回调处理
+                    if self._audio_callback:
+                        self._audio_callback(audio_data)
 
                 except Exception as e:
-                    self.logger.error(f"Error processing audio frame: {str(e)}")
+                    self.logger.error(f"Error processing audio frame: {e}")
+                    continue
 
         except Exception as e:
-            self.logger.error(f"Audio processing loop error: {str(e)}")
+            self.logger.error(f"Audio processing loop error: {e}")
 
     @staticmethod
     def is_valid_camera(index):
@@ -432,123 +432,146 @@ class StreamCamera:
 
     def start(self, source=0):
         """启动流式摄像头"""
-        with self._lock:
-            # 确保在重新启动前清理旧的连接
-            self.cleanup()
+        retry_count = 0
+        max_retries = 3
+        
+        while retry_count < max_retries:
+            try:
+                with self._lock:
+                    # 获取流媒体地址
+                    rtmp_url = self.get_stream_url()
 
-            # 每次启动都重新获取流地址
-            rtmp_url = self.get_stream_url()
-            if not rtmp_url:
-                raise ValueError("RTMP URL is required")
-
-            retry_count = 0
-            max_retries = 3
-            while retry_count < max_retries:
-                try:
-                    # 创建视频容器
+                    # 初始化视频容器(缺少这部分)
                     self.video_container = av.open(rtmp_url, options={
                         'rtsp_transport': 'tcp',
                         'stimeout': '5000000',
-                        'reconnect': '1',  # 添加重连选项
-                        'reconnect_streamed': '1',  # 流式重连
-                        'reconnect_delay_max': '2'  # 最大重连延迟
+                        'reconnect': '1',
+                        'reconnect_streamed': '1',
+                        'reconnect_delay_max': '2'
                     })
+                    
+                    # 初始化视频流(缺少这部分)
+                    self.video_stream = self.video_container.streams.video[0]
+                    self.is_running = True
+                    self.is_initialized = True  # 设置初始化标志
 
-                    # 创建音频容器
+                    # 现有的音频初始化代码...
+                    # 创建独立的音频容器
                     self.audio_container = av.open(rtmp_url, options={
                         'rtsp_transport': 'tcp',
-                        'stimeout': '5000000'
+                        'stimeout': '5000000',
+                        'reconnect': '1',
+                        'reconnect_streamed': '1',
+                        'reconnect_delay_max': '2'
                     })
 
-                    self.is_running = True
-                    self.is_initialized = True
-
-                    # 获取视频流
-                    self.video_stream = self.video_container.streams.video[0]
-
                     # 初始化音频流
-                    try:
-                        self.audio_stream = self.audio_container.streams.audio[0]
-                        self.logger.info(f"Audio stream info: {self.audio_stream.rate}Hz, "
-                                         f"{self.audio_stream.channels} channels")
+                    self.audio_stream = self.audio_container.streams.audio[0]
+                    self.logger.info(f"Audio stream initialized: {self.audio_stream.rate}Hz, "
+                                f"{self.audio_stream.channels} channels")
 
-                        # 启动音频处理线程
-                        self.audio_thread = threading.Thread(target=self.audio_processing_loop)
-                        self.audio_thread.daemon = True
-                        self.audio_thread.start()
+                    # 启动音频处理线程
+                    self.audio_thread = threading.Thread(target=self.audio_processing_loop)
+                    self.audio_thread.daemon = True
+                    self.audio_thread.start()
 
-                    except Exception as e:
-                        self.logger.error(f"Audio initialization error: {e}")
-
-                    return True
-
-                except av.error.OSError as e:
-                    self.logger.error(f"Stream error (attempt {retry_count + 1}/{max_retries}): {e}")
-                    self.cleanup()  # 确保清理资源
-                    retry_count += 1
-                    time.sleep(2)
-                except Exception as e:
-                    self.logger.error(f"Unexpected error: {e}")
-                    self.cleanup()  # 确保清理资源
-                    break
-
-            return False
+                return
+            except Exception as e:
+                retry_count += 1
+                self.logger.error(f"Stream initialization error (attempt {retry_count}/{max_retries}): {e}")
+                time.sleep(1)  # 重试延迟
+                
+        raise RuntimeError("Failed to initialize stream after maximum retries")
 
     def read(self):
+        """读取视频帧，包含自动重连逻辑"""
         if not self.is_running:
+            self.reconnect()  # 如果未运行则尝试重连
             return False, None
 
         try:
-            # 添加重连逻辑
-            if self.video_stream is None:
-                current_time = time.time()
-                if (current_time - self.last_reconnect_time > self.reconnect_delay and
-                        self.reconnect_attempts < self.max_reconnects):
+            if self.video_stream is None or self.video_container is None:
+                if time.time() - self.last_reconnect_time > self.reconnect_delay:
                     self.reconnect()
                 return False, None
 
-            for frame in self.process_stream(self.video_container, self.video_stream):
-                if isinstance(frame, av.VideoFrame):
-                    img = frame.to_ndarray(format='bgr24')
-                    return True, img
+            for packet in self.video_container.demux(self.video_stream):
+                for frame in packet.decode():
+                    if isinstance(frame, av.VideoFrame):
+                        return True, frame.to_ndarray(format='bgr24')
+                break  # 只读取一帧就退出
 
-        except Exception as e:
-            self.logger.error(f"Error reading frame: {e}")
-            self.video_stream = None
+            return False, None
+
+        except (av.error.OSError, av.error.InvalidDataError) as e:
+            self.logger.error(f"Stream read error: {e}")
+            self.video_stream = None  # 触发重连
             return False, None
 
     def reconnect(self):
-        """重新连接流"""
+        """改进的重连机制"""
         try:
             current_time = time.time()
-            # 检查重连频率
             if (current_time - self.last_reconnect_time) < self.reconnect_delay:
-                time.sleep(self.reconnect_delay)
+                return False
 
-            self.cleanup()
-            rtmp_url = self.get_stream_url()  # 使用改进后的get_stream_url方法
+            self.last_reconnect_time = current_time
+            self.reconnect_attempts += 1
+            
+            if self.reconnect_attempts > self.max_reconnects:
+                self.logger.error("Max reconnection attempts reached")
+                return False
+
+            self.cleanup()  # 清理旧连接
+            
+            rtmp_url = self.get_stream_url()
             if not rtmp_url:
                 return False
 
-            # 其他重连代码保持不变...
+            # 重新初始化视频容器
+            self.video_container = av.open(rtmp_url, options={
+                'rtsp_transport': 'tcp',
+                'stimeout': '5000000',
+                'reconnect': '1',
+                'reconnect_streamed': '1',
+                'reconnect_delay_max': '2'
+            })
+            
+            self.video_stream = self.video_container.streams.video[0]
+            self.is_running = True
+            self.logger.info("Stream reconnected successfully")
+            return True
 
         except Exception as e:
             self.logger.error(f"Reconnection failed: {e}")
             return False
 
     def cleanup(self) -> None:
+        """改进的资源清理"""
         self.is_running = False
+        self.is_initialized = False  # 重置初始化状态
 
-        if hasattr(self, 'video_container'):
+        # 停止音频线程
+        if hasattr(self, 'audio_thread') and self.audio_thread:
             try:
-                self.video_container.close()
+                self.audio_thread.join(timeout=1.0)
             except Exception as e:
-                print(f"Error closing video container: {e}")
+                self.logger.error(f"Error stopping audio thread: {e}")
 
-        if hasattr(self, 'audio_container'):
-            try:
-                self.audio_container.close()
-            except Exception as e:
-                print(f"Error closing audio container: {e}")
+        # 关闭容器
+        for container_name in ['video_container', 'audio_container']:
+            if hasattr(self, container_name):
+                try:
+                    container = getattr(self, container_name)
+                    if container:
+                        container.close()
+                except Exception as e:
+                    self.logger.error(f"Error closing {container_name}: {e}")
+                finally:
+                    setattr(self, container_name, None)
 
+        # 重置其他状态
+        self.video_stream = None
+        self.audio_stream = None
+        self.reconnect_attempts = 0
         cv2.destroyAllWindows()

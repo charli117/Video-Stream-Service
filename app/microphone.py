@@ -18,15 +18,31 @@ class Microphone:
         self.audio = None
         self.current_device = 0
         self.sample_rate = InitialConfig.AUDIO_SAMPLE_RATE
-        self.channels = InitialConfig.AUDIO_CHANNELS
+        # 初始化时先不设置channels
+        self._channels = None
         self.chunk_size = InitialConfig.AUDIO_CHUNK_SIZE
         self.is_initialized = False
         self.analysis_enabled = False
         self.audio_queue = Queue(maxsize=100)
-        # 添加流式处理相关属性
         self.is_stream_mode = InitialConfig.CAMERA_TYPE == 'stream'
         self.stream_audio_container = None
         self.stream_audio_thread = None
+
+    @property
+    def channels(self):
+        if self._channels is None:
+            try:
+                devices = sd.query_devices()
+                device_info = devices[self.current_device]
+                self._channels = device_info['max_input_channels']
+            except Exception as e:
+                self.logger.warning(f"Failed to get device channels, using default value 1: {e}")
+                self._channels = 1
+        return self._channels
+
+    @channels.setter
+    def channels(self, value):
+        self._channels = value
 
     def set_analysis_enabled(self, enabled: bool):
         """设置是否启用音频提取与分析"""
@@ -44,7 +60,6 @@ class Microphone:
 
     @staticmethod
     def _is_valid_device(index):
-        """检查音频设备是否有效"""
         try:
             devices = sd.query_devices()
             if 0 <= index < len(devices):
@@ -65,7 +80,6 @@ class Microphone:
         try:
             devices = sd.query_devices()
             available_devices = []
-
             for i, device in enumerate(devices):
                 if device['max_input_channels'] > 0:
                     info = {
@@ -77,7 +91,7 @@ class Microphone:
                     available_devices.append(info)
             return available_devices
         except Exception as e:
-            Microphone.logger.error(f"Error listing audio devices: {str(e)}")  # 使用类级别的 logger
+            Microphone.logger.error(f"Error listing audio devices: {str(e)}")
             return []
 
     def start(self, device_index=None):
@@ -85,50 +99,44 @@ class Microphone:
         try:
             self.logger.info("Initializing audio device")
             if self.is_initialized:
-                self.release()  # 确保先释放现有资源
-                time.sleep(0.5)  # 等待资源释放
+                self.release()  # 释放现有资源
+                time.sleep(0.5)
             
             if self.is_stream_mode:
-                # 使用StreamCamera的音频流
+                # 流媒体模式下，忽略传入的 device_index，直接使用流媒体音频数据
                 from .camera import StreamCamera
                 stream_camera = StreamCamera()
                 stream_url = stream_camera.get_stream_url()
                 if not stream_url:
                     raise ValueError("Failed to get stream URL")
                 
-                # 初始化音频容器
+                # 使用流媒体音频容器，确保audio_container来自StreamCamera
                 self.stream_audio_container = av.open(stream_url, options={
                     'rtsp_transport': 'tcp',
                     'stimeout': '5000000'
                 })
                 
-                # 获取音频流
                 audio_stream = self.stream_audio_container.streams.audio[0]
                 self.sample_rate = audio_stream.rate
                 self.channels = audio_stream.channels
+                self.logger.info(f"Stream audio initialized: {self.sample_rate}Hz, {self.channels} channels")
                 
-                # 启动音频处理线程
                 self.stream_audio_thread = threading.Thread(target=self._stream_audio_processing)
                 self.stream_audio_thread.daemon = True
                 self.stream_audio_thread.start()
                 
             else:
-                # 使用传入的device_index或默认值    
+                # 本地模式：使用传入的 device_index 或者默认值
                 device_index = device_index if device_index is not None else self.current_device
                 self.current_device = device_index
 
                 if not Microphone.is_valid_device(device_index):
                     raise ValueError(f"Invalid audio device index: {device_index}")
 
-                def audio_callback(in_data, frame_count, time_info, status):
-                    try:
-                        # 将音频数据放入队列
-                        if self.analysis_enabled and not self.audio_queue.full():
-                            audio_data = np.frombuffer(in_data, dtype=np.float32)
-                            self.audio_queue.put_nowait(audio_data)
-                    except:
-                        pass
-                    return (in_data, pyaudio.paContinue)
+                devices = sd.query_devices()
+                device_info = devices[device_index]
+                self._channels = device_info['max_input_channels']
+                self.logger.info(f"Detected audio device with {self._channels} channels")
 
                 self.audio = pyaudio.PyAudio()
                 self.stream = self.audio.open(
@@ -138,10 +146,7 @@ class Microphone:
                     input=True,
                     frames_per_buffer=self.chunk_size,
                     input_device_index=device_index,
-                    stream_callback=audio_callback
                 )
-                
-                # 确保流被正确打开
                 if not self.stream.is_active():
                     self.stream.start_stream()
                 
@@ -157,74 +162,68 @@ class Microphone:
         """流式音频处理线程"""
         try:
             audio_stream = self.stream_audio_container.streams.audio[0]
-            
             for frame in self.stream_audio_container.decode(audio_stream):
                 if not self.is_initialized:
                     break
-                    
                 try:
-                    # 转换音频帧为numpy数组
                     audio_data = frame.to_ndarray()
-                    
-                    # 确保数据类型为float32
                     if audio_data.dtype != np.float32:
                         audio_data = audio_data.astype(np.float32)
-                    
-                    # 归一化
+                    if audio_data.ndim == 1:
+                        audio_data = audio_data.reshape(-1, 1)
                     if audio_data.max() > 1.0:
                         audio_data = audio_data / 32768.0
-                    
-                    # 放入队列
                     if self.analysis_enabled and not self.audio_queue.full():
                         self.audio_queue.put_nowait(audio_data)
-                        
                 except Exception as e:
                     self.logger.error(f"Error processing audio frame: {str(e)}")
-                    
         except Exception as e:
             self.logger.error(f"Stream audio processing error: {str(e)}")
             
     def read(self, frames=None, chunk_size=None):
         """从队列中读取音频数据"""
-        if not self.analysis_enabled:
-            return False, None
-
-        if not self.is_initialized or self.stream is None:
-            self.logger.error("Microphone未初始化")
-            return False, None
-
         try:
-            # 检查stream是否active
-            if not self.stream.is_active():
-                self.logger.warning("Audio stream is not active, attempting to restart")
-                self.start(self.current_device)  # 尝试重新启动
-                if not self.is_initialized or self.stream is None:
-                    self.logger.error("Failed to restart audio stream")
+            if not self.is_initialized:
+                self.logger.info("Microphone未初始化，正在初始化...")
+                self.start()  # 此处不传device_index，保证流媒体模式正确
+                time.sleep(0.1)
+                if not self.is_initialized:
+                    self.logger.error("初始化失败")
                     return False, None
 
-            read_frames = frames if frames else chunk_size if chunk_size else self.chunk_size
-            data, overflowed = self.stream.read(read_frames)
-            if overflowed:
-                self.logger.warning("Audio input buffer overflowed")
+            if self.is_stream_mode:
+                try:
+                    # 设置一个超时时间，等待队列中有音频数据
+                    data = self.audio_queue.get(timeout=3)
+                except Empty:
+                    return False, None
+            else:
+                if not self.stream or not self.stream.is_active():
+                    self.logger.warning("音频流未激活，尝试重新初始化...")
+                    self.release()
+                    time.sleep(0.1)
+                    self.start(self.current_device)
+                    if not self.stream or not self.stream.is_active():
+                        return False, None
 
-            # 将返回数据转换为 numpy.ndarray
+                try:
+                    read_frames = frames if frames else chunk_size if chunk_size else self.chunk_size
+                    data = np.frombuffer(self.stream.read(read_frames, exception_on_overflow=False), dtype=np.float32)
+                except Exception as e:
+                    self.logger.error(f"读取音频流错误: {str(e)}")
+                    return False, None
+
             if not isinstance(data, np.ndarray):
                 data = np.array(data)
-
-            # 如果数据类型不是float32，转换为float32
             if data.dtype != np.float32:
                 data = data.astype(np.float32)
-
-            # 归一化音频数据
             if data.max() > 1.0:
                 data = data / 32768.0
 
             return True, data
 
-        except Empty:
-            return False, None
         except Exception as e:
-            self.logger.error(f"Error reading audio: {str(e)}")
+            self.logger.error(f"音频读取错误: {str(e)}")
             return False, None
 
     def get_info(self):
@@ -235,7 +234,6 @@ class Microphone:
                 'channels': 0,
                 'sample_rate': 0
             }
-
         return {
             'initialized': self.is_initialized,
             'channels': self.channels,
@@ -253,7 +251,6 @@ class Microphone:
                 if self.stream_audio_thread and self.stream_audio_thread.is_alive():
                     self.stream_audio_thread.join(timeout=1.0)
             else:
-                # 原有的释放逻辑
                 if self.stream:
                     self.stream.stop_stream()
                     self.stream.close()
@@ -261,8 +258,6 @@ class Microphone:
                 if self.audio:
                     self.audio.terminate()
                     self.audio = None
-                
             self.is_initialized = False
-
         except Exception as e:
             self.logger.error(f"Error releasing audio device: {str(e)}")

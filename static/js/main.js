@@ -50,7 +50,12 @@ function showImageViewer(imageUrl) {
 async function loadDevices() {
     try {
         const refreshButton = document.getElementById('refreshButton');
+        const analysisToggle = document.getElementById('analysisToggle');
+        
+        // 初始禁用按钮
         refreshButton.disabled = true;
+        analysisToggle.disabled = true;
+        analysisToggle.title = "正在加载设备列表...";
 
         // 1. 获取设备名称并发送到服务器
         let deviceNames = {};
@@ -227,14 +232,59 @@ async function loadDevices() {
             audioSelect.onchange = () => switchDevices();
         }
 
+        // 在设备列表更新完成后检查设备状态
+        if (data.cameras?.length > 0 || data.audioDevices?.length > 0) {
+            // 获取设备初始化状态
+            const statusResponse = await fetch("/api/status");
+            const statusData = await statusResponse.json();
+            
+            if (statusData.devices_ready) {
+                analysisToggle.disabled = false;
+                analysisToggle.title = "";
+            } else {
+                analysisToggle.disabled = true;
+                analysisToggle.title = "设备未就绪，请等待初始化完成";
+            }
+        } else {
+            analysisToggle.disabled = true;
+            analysisToggle.title = "未检测到可用设备";
+        }
+
         // 5. 更新当前设备状态
         currentCamera = data.currentCamera;
         currentAudioDevice = data.currentAudioDevice;
         
         hideError();
         
+        // 获取设备状态
+        const statusResponse = await fetch("/api/status");
+        const statusData = await statusResponse.json();
+        
+        // 根据设备状态更新按钮
+        if (statusData.devices_ready && !statusData.audio_error) {
+            analysisToggle.disabled = false;
+            analysisToggle.title = "";
+            
+            // 更新按钮状态
+            analysisToggle.setAttribute('data-enabled', statusData.analysis_enabled);
+            analysisToggle.innerHTML = statusData.analysis_enabled 
+                ? '<i class="fas fa-stop"></i> Close Analysis'
+                : '<i class="fas fa-play"></i> Open Analysis';
+            updateButtonColor();
+        } else {
+            analysisToggle.disabled = true;
+            analysisToggle.title = statusData.audio_error 
+                ? statusData.audio_error.message 
+                : "设备未就绪";
+        }
+
     } catch (error) {
         showError('Error loading devices: ' + error.message);
+        const analysisToggle = document.getElementById('analysisToggle');
+        if (analysisToggle) {
+            analysisToggle.disabled = true;
+            analysisToggle.title = "设备加载失败";
+        }
     } finally {
         refreshButton.disabled = false;
     }
@@ -395,16 +445,8 @@ function playAudioSegment(audioUrl) {
 let statusUpdateInterval = null;
 
 function startStatusUpdates() {
-    // 如果已经存在定时器，先清除
-    if (statusUpdateInterval) {
-        clearInterval(statusUpdateInterval);
-    }
-    
-    // 立即更新一次
-    updateStatus().then();
-    
-    // 设置新的定时器
-    statusUpdateInterval = setInterval(updateStatus, 500);
+    updateStatus();  // 立即执行一次
+    statusUpdateInterval = setInterval(updateStatus, 1000);  // 每秒更新一次
 }
 
 window.addEventListener('beforeunload', async function(e) {
@@ -426,57 +468,51 @@ let toggleAnalysisTimeout;
 
 function toggleAnalysis() {
     const analysisToggle = document.getElementById('analysisToggle');
-    // 根据 data-enabled 属性判断状态
     let isEnabled = analysisToggle.getAttribute('data-enabled') === 'true';
     
-    analysisToggle.disabled = true;
-    
+    // 移除按钮禁用状态
+    // analysisToggle.disabled = true; // 删除此行 
+
     if (toggleAnalysisTimeout) {
         clearTimeout(toggleAnalysisTimeout);
     }
     
-    toggleAnalysisTimeout = setTimeout(() => {
-        fetch('/api/toggle_analysis', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ enabled: !isEnabled })
-        })
-        .then(response => {
-            if (!response.ok) {
-                return response.json().then(data => {
-                    throw new Error(data.error || 'Failed to toggle analysis');
-                });
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
-                // 更新 data-enabled 属性记录当前状态
-                analysisToggle.setAttribute('data-enabled', data.analysis_enabled);
-                analysisToggle.innerHTML = data.analysis_enabled 
-                    ? '<i class="fas fa-stop"></i> Close Analysis'
-                    : '<i class="fas fa-play"></i> Open Analysis';
-                updateButtonColor();
-                saveButtonState();
-                hideError();
-            } else {
+    // 立即发送请求,不再使用延迟
+    fetch('/api/toggle_analysis', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ enabled: !isEnabled })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
                 throw new Error(data.error || 'Failed to toggle analysis');
-            }
-        })
-        .catch(error => {
-            showError('Error toggling analysis: ' + error.message);
-            // 回滚状态显示
-            analysisToggle.innerHTML = isEnabled 
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            analysisToggle.setAttribute('data-enabled', data.analysis_enabled);
+            analysisToggle.innerHTML = data.analysis_enabled 
                 ? '<i class="fas fa-stop"></i> Close Analysis'
                 : '<i class="fas fa-play"></i> Open Analysis';
             updateButtonColor();
-        })
-        .finally(() => {
-            analysisToggle.disabled = false;
-        });
-    }, 300);
+            saveButtonState();
+            hideError();
+        } else {
+            throw new Error(data.error || 'Failed to toggle analysis');
+        }
+    })
+    .catch(error => {
+        showError('Error toggling analysis: ' + error.message);
+        analysisToggle.innerHTML = isEnabled 
+            ? '<i class="fas fa-stop"></i> Close Analysis'
+            : '<i class="fas fa-play"></i> Open Analysis';
+        updateButtonColor(); 
+    });
 }
 
 // 更新按钮颜色的函数
@@ -500,7 +536,29 @@ async function updateStatus() {
     try {
         const response = await fetch("/api/status");
         const status = await response.json();
-
+        const analysisToggle = document.getElementById('analysisToggle');
+        
+        if (analysisToggle) {
+            // 根据设备状态更新按钮
+            if (!status.devices_ready) {
+                analysisToggle.disabled = true;
+                analysisToggle.title = "设备未就绪，请等待初始化完成";
+            } else if (status.audio_error) {
+                analysisToggle.disabled = true;
+                analysisToggle.title = status.audio_error.message;
+            } else {
+                analysisToggle.disabled = false;
+                analysisToggle.title = "";
+                
+                // 更新按钮状态
+                analysisToggle.setAttribute('data-enabled', status.analysis_enabled);
+                analysisToggle.innerHTML = status.analysis_enabled 
+                    ? '<i class="fas fa-stop"></i> Close Analysis'
+                    : '<i class="fas fa-play"></i> Open Analysis';
+                updateButtonColor();
+            }
+        }
+        
         // 获取状态显示元素
         const statusDiv = document.getElementById('status');
         if (!statusDiv) return;
@@ -524,26 +582,42 @@ async function updateStatus() {
             <p>FPS: ${status.fps || 0}</p>
             <p>Analysis: ${status.analysis_enabled ? 'Enabled' : 'Disabled'}</p>
         `;
-
-        // 检查音频错误并添加错误提示
-        if (status.audio_error) {
+        
+        if (!status.devices_ready) {
+            if (analysisToggle) {
+                analysisToggle.disabled = true;
+                analysisToggle.title = "设备未就绪";
+            }
+            
+            // 添加设备未就绪提示
+            statusHtml += `
+                <div class="warning">
+                    <i class="fas fa-exclamation-circle"></i>
+                    设备未就绪，请等待初始化完成
+                </div>
+            `;
+        } else if (status.audio_error) {
+            // 有音频错误时禁用分析按钮
+            if (analysisToggle) {
+                analysisToggle.disabled = true;
+                analysisToggle.title = status.audio_error.message;
+            }
+            
             statusHtml += `
                 <div class="error">
                     <i class="fas fa-exclamation-triangle"></i>
                     音频错误: ${status.audio_error.message}
                 </div>
             `;
-            
-            // 禁用分析按钮
-            const analysisToggle = document.getElementById('analysisToggle');
+        } else {
+            // 设备就绪且无错误时启用按钮
             if (analysisToggle) {
-                analysisToggle.disabled = true;
-                analysisToggle.title = status.audio_error.message;
+                analysisToggle.disabled = false;
+                analysisToggle.title = "";
             }
         }
 
         // 更新分析按钮状态
-        const analysisToggle = document.getElementById('analysisToggle');
         if (analysisToggle) {
             const currentState = analysisToggle.textContent === 'Close Analysis';
             if (currentState !== status.analysis_enabled) {

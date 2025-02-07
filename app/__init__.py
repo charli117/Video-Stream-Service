@@ -31,22 +31,23 @@ def create_app():
         # 初始化音频设备
         if 'audio' in InitialConfig.ANALYZER_TYPE:
             mic = Microphone()
-            mic.start()  # 只初始化设备，不启用分析
-            available_devices = mic.list_devices()
-            
-            if available_devices:
-                device_index = available_devices[0]['index']
-                app.logger.info(f"Using audio device: {available_devices[0]['name']} (index: {device_index})")
-                
-                # 设置音频设备
-                audio_analyzer.current_device = device_index
+            # 如果是流媒体模式，不使用本地设备索引
+            if InitialConfig.CAMERA_TYPE == 'stream':
+                mic.start()  # 流媒体模式内部忽略 device_index
                 audio_analyzer.microphone = mic
-                
-                # 启动分析器但不开启分析
-                audio_analyzer.start(device_index)
-                app.logger.info("Audio analyzer initialized successfully")
+                audio_analyzer.start()
+                app.logger.info("Audio analyzer initialized in stream mode")
             else:
-                app.logger.warning("No audio input devices found")
+                available_devices = mic.list_devices()
+                if available_devices:
+                    device_index = available_devices[0]['index']
+                    app.logger.info(f"Using audio device: {available_devices[0]['name']} (index: {device_index})")
+                    audio_analyzer.current_device = device_index
+                    audio_analyzer.microphone = mic
+                    audio_analyzer.start(device_index)
+                    app.logger.info("Audio analyzer initialized successfully")
+                else:
+                    app.logger.warning("No audio input devices found")
     except Exception as e:
         app.logger.error(f"Failed to initialize audio analyzer: {str(e)}")
         if not video_analyzer.is_running:

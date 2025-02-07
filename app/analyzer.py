@@ -16,7 +16,6 @@ from app.camera import Camera
 from app.microphone import Microphone
 from config import InitialConfig
 from logging.handlers import RotatingFileHandler
-# import librosa.feature as librosa_feature
 from skimage.metrics import structural_similarity as ssim
 
 
@@ -564,7 +563,7 @@ class VideoAnalyzer(BaseAnalyzer):
 
         try:
             height, width = frame.shape[:2]
-            if height > self.max_display_height:
+            if (height > self.max_display_height):
                 scale = self.max_display_height / height
                 new_width = int(width * scale)
                 new_height = self.max_display_height
@@ -630,7 +629,7 @@ class AudioAnalyzer(BaseAnalyzer):
     def switch_audio(self, device_index):
         """切换音频输入设备"""
         try:
-            self.logger.info(f"Attempting to switch audio device to index: {device_index}")
+            self.logger.info(f"切换音频设备到: {device_index}")
 
             # 停止当前分析
             was_analyzing = self.analysis_enabled
@@ -644,6 +643,7 @@ class AudioAnalyzer(BaseAnalyzer):
 
             # 初始化新设备
             self.current_device = device_index
+            self.microphone.is_initialized = False
             self.microphone.start(device_index)
 
             # 恢复之前的分析状态
@@ -657,33 +657,18 @@ class AudioAnalyzer(BaseAnalyzer):
             return False
 
     def generate_audio(self):
-        """生成音频流"""
-        import numpy as np
         active_segment = []
         is_silent = True
+        last_active_time = time.time()
+        silence_timeout = 3.0
+        max_segment_duration = 10
+        max_samples = int(max_segment_duration * self.sample_rate)
         retry_count = 0
         max_retries = 3
 
         while self.is_running:
             try:
-                if not self.microphone.is_initialized:
-                    self.logger.warning("[generate_audio] 麦克风未初始化，尝试初始化...")
-                    if retry_count >= max_retries:
-                        # 达到最大重试次数,设置错误状态
-                        self.error_state = {
-                            'code': 'AUDIO_INIT_FAILED',
-                            'message': '无法初始化音频设备,请检查设备连接'
-                        }
-                        self.logger.error(f"[generate_audio] 连续{max_retries}次初始化失败,停止重试")
-                        break
-
-                    retry_count += 1
-                    self.microphone.start(self.current_device)
-                    time.sleep(1)
-                    continue
-
                 success, raw_data = self.microphone.read()
-
                 if not success or raw_data is None:
                     retry_count += 1
                     if retry_count >= max_retries:
@@ -693,44 +678,54 @@ class AudioAnalyzer(BaseAnalyzer):
                         }
                         self.logger.error(f"[generate_audio] 连续{max_retries}次无法读取音频数据")
                         break
+                    time.sleep(1)
                     continue
 
-                # 成功读取数据后重置重试计数
+                # 成功读取后重置重试计数
                 retry_count = 0
 
-                # 处理音频数据，确保数据为 np.ndarray 且为 float32 类型
-                if not isinstance(raw_data, np.ndarray):
-                    audio_data = np.array(raw_data)
-                else:
-                    audio_data = raw_data
-
+                # 转换音频数据为 np.ndarray 且为 float32 类型
+                audio_data = raw_data if isinstance(raw_data, np.ndarray) else np.array(raw_data)
                 if audio_data.dtype != np.float32:
                     audio_data = audio_data.astype(np.float32)
 
+                # 规范化音频数据
                 if audio_data.max() > 1.0:
                     audio_data = audio_data / 32768.0
 
+                # 如果音量足够大，则认为是活跃语音片段
                 amplitude = np.abs(audio_data).mean()
-
                 if amplitude > InitialConfig.AUDIO_CHANGE_THRESHOLD:
                     active_segment.append(audio_data)
-                    is_silent = False
-                    self.logger.info("[generate_audio] 检测到非静默音频，添加到活动片段")
-                else:
-                    if not is_silent and active_segment:
+                    total_samples = sum(seg.shape[0] for seg in active_segment)
+                    
+                    # 当累计的样本数达到阈值时，强制保存音频文件
+                    if total_samples >= max_samples:
                         complete_segment = np.concatenate(active_segment, axis=0)
-                        self.logger.info("[generate_audio] 检测到静默音频，完成当前音频片段")
-                        if self.analysis_enabled:
-                            if self.audio_queue.qsize() < self.audio_queue.maxsize:
-                                self.audio_queue.put_nowait(np.copy(complete_segment))
-                                self.logger.info("[generate_audio] 音频片段已推送至队列")
+                        save_result = self._save_audio_file(complete_segment)
+                        if save_result:
+                            self.logger.info(f"[generate_audio] 队列满，已保存音频文件: {save_result['filepath']}")
+                        else:
+                            self.logger.error("[generate_audio] 保存音频文件失败")
+                        active_segment = []  # 清空，开始新的队列
+                    is_silent = False
+                    last_active_time = time.time()
+                else:
+                    # 静默时，若当前片段非空且静默超过超时，则保存文件
+                    if not is_silent and active_segment:
+                        if (time.time() - last_active_time) >= silence_timeout:
+                            complete_segment = np.concatenate(active_segment, axis=0)
+                            save_result = self._save_audio_file(complete_segment)
+                            if save_result:
+                                self.logger.info(f"[generate_audio] 检测到静默超时，已保存音频文件: {save_result['filepath']}")
                             else:
-                                self.logger.warning("[generate_audio] 音频队列已满，跳过当前片段")
-                        active_segment = []
-                        is_silent = True
+                                self.logger.error("[generate_audio] 保存音频文件失败")
+                            active_segment = []
+                            is_silent = True
                     else:
-                        self.logger.debug("[generate_audio] 静默状态，跳过当前数据")
-                
+                        # 更新最后活跃时间
+                        last_active_time = time.time()
+
             except Exception as e:
                 self.logger.error(f"Error generating audio: {str(e)}")
                 time.sleep(0.1)
@@ -747,26 +742,23 @@ class AudioAnalyzer(BaseAnalyzer):
         super().stop()
             
     def _analyze_loop(self):
-        """音频分析循环，从队列中获取音频片段并进行异步分析"""
         while self.is_running:
             try:
                 if not self.analysis_enabled:
                     time.sleep(0.05)
                     continue
-
-                # 增加对队列大小的监控
-                if self.audio_queue.qsize() > self.audio_queue.maxsize * 0.8:
-                    self.logger.warning(f"Audio queue is almost full: {self.audio_queue.qsize()}/{self.audio_queue.maxsize}, pausing audio capture")
-                    time.sleep(1)  # 暂停音频采集
-                    continue
-
+                    
                 if not self.audio_queue.empty():
                     audio_data = self.audio_queue.get()
                     
-                    # 异步调用LLM服务
+                    # 保存音频文件
+                    save_result = self._save_audio_file(audio_data)
+                    if save_result:
+                        self.logger.info(f"Successfully saved audio file: {save_result['filepath']}")
+                    
+                    # 异步分析
                     Thread(target=self._llm_analyze, args=(audio_data,)).start()
-                    self.logger.info(f"[analyze_loop] Audio analysis dispatched to LLM")
-
+                    
             except Exception as e:
                 self.logger.error(f"Error in audio analysis: {str(e)}")
             time.sleep(0.1)
