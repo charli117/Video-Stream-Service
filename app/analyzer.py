@@ -631,71 +631,51 @@ class AudioAnalyzer(BaseAnalyzer):
             
     def generate_audio(self):
         """生成音频流，并进行静默检测和分割"""
-        active_segment = []  # 存储当前活动音频片段
-        is_silent = True  # 初始状态为静默
+        import numpy as np
+        active_segment = []
+        is_silent = True
 
         while self.is_running:
             try:
-                result = self.microphone.read()
-                self.logger.info(f"[generate_audio] Microphone read result: {result}")
+                success, raw_data = self.microphone.read()
+                if not success or raw_data is None:
+                    self.logger.warning("[generate_audio] 无法读取到音频数据")
+                    time.sleep(0.01)
+                    continue
 
-                if result is not None:
-                    if isinstance(result, tuple):
-                        raw_data = result[1] if len(result) >= 2 else result[0]
-                        self.logger.info(f"[generate_audio] Extracted tuple element as raw_data")
-                    else:
-                        raw_data = result
-                        self.logger.info(f"[generate_audio] Raw data is not a tuple")
-
-                    if not isinstance(raw_data, np.ndarray):
-                        audio_data = np.array(raw_data)
-                        self.logger.info(f"[generate_audio] Converted raw_data to np.ndarray, shape: {audio_data.shape}")
-                    else:
-                        audio_data = raw_data
-                        self.logger.info(f"[generate_audio] Audio data is already np.ndarray, shape: {audio_data.shape}")
-
-                    # 确保音频数据是float32类型
-                    if audio_data.dtype != np.float32:
-                        audio_data = audio_data.astype(np.float32)
-
-                    # 规范化音频数据
-                    if audio_data.max() > 1.0:
-                        audio_data = audio_data / 32768.0
-
-                    # 计算当前音频数据的平均幅度
-                    amplitude = np.abs(audio_data).mean()
-
-                    if amplitude > InitialConfig.AUDIO_CHANGE_THRESHOLD:
-                        # 检测到非静默音频，添加到当前片段
-                        active_segment.append(audio_data)
-                        is_silent = False
-                        self.logger.info(f"[generate_audio] Non-silent audio detected, adding to segment")
-                    else:
-                        # 检测到静默音频
-                        if not is_silent and active_segment:
-                            # 如果之前有活动片段，则完成片段并放入队列
-                            complete_segment = np.concatenate(active_segment, axis=0)
-                            self.logger.info(f"[generate_audio] Silent audio detected, completing segment")
-
-                            if self.analysis_enabled:
-                                try:
-                                    # 增加对队列大小的判断
-                                    if self.audio_queue.qsize() < self.audio_queue.maxsize:
-                                        self.audio_queue.put_nowait(np.copy(complete_segment))
-                                        self.logger.info(f"[generate_audio] Complete audio segment pushed to queue")
-                                    else:
-                                        self.logger.warning(f"[generate_audio] Audio queue is full, skipping audio data")
-                                except Exception as put_err:
-                                    self.logger.warning(f"[generate_audio] Audio queue is full, skipping audio data: {put_err}")
-
-                            # 重置活动片段
-                            active_segment = []
-                            is_silent = True
-                        else:
-                            self.logger.debug(f"[generate_audio] Still in silent state, skipping")
-
+                # 确保数据为 np.ndarray 且为 float32 类型
+                if not isinstance(raw_data, np.ndarray):
+                    audio_data = np.array(raw_data)
+                    self.logger.info(f"[generate_audio] 转换 raw_data 至 numpy.ndarray, shape: {audio_data.shape}")
                 else:
-                    self.logger.warning(f"[generate_audio] No data read from microphone")
+                    audio_data = raw_data
+
+                if audio_data.dtype != np.float32:
+                    audio_data = audio_data.astype(np.float32)
+
+                if audio_data.max() > 1.0:
+                    audio_data = audio_data / 32768.0
+
+                amplitude = np.abs(audio_data).mean()
+
+                if amplitude > InitialConfig.AUDIO_CHANGE_THRESHOLD:
+                    active_segment.append(audio_data)
+                    is_silent = False
+                    self.logger.info("[generate_audio] 检测到非静默音频，添加到活动片段")
+                else:
+                    if not is_silent and active_segment:
+                        complete_segment = np.concatenate(active_segment, axis=0)
+                        self.logger.info("[generate_audio] 检测到静默音频，完成当前音频片段")
+                        if self.analysis_enabled:
+                            if self.audio_queue.qsize() < self.audio_queue.maxsize:
+                                self.audio_queue.put_nowait(np.copy(complete_segment))
+                                self.logger.info("[generate_audio] 音频片段已推送至队列")
+                            else:
+                                self.logger.warning("[generate_audio] 音频队列已满，跳过当前片段")
+                        active_segment = []
+                        is_silent = True
+                    else:
+                        self.logger.debug("[generate_audio] 静默状态，跳过当前数据")
 
             except Exception as e:
                 self.logger.error(f"Error generating audio: {str(e)}")

@@ -12,7 +12,7 @@ class InitialConfig:
     STREAM_CAMERA_PROTOCOL = 3
 
     # 分析配置,支持 audio、video 两种选择
-    ANALYZER_TYPE = ['audio', 'video']
+    ANALYZER_TYPE = ['audio']
 
     # 视频分析配置
     MAX_QUEUE_SIZE = 32

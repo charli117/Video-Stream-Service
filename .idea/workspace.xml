@@ -6,14 +6,14 @@
   <component name="ChangeListManager">
     <list default="true" id="c7800c4b-088e-4c62-8313-176bf30b8a3d" name="更改" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/__init__.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/analyzer.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/analyzer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/camera.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/camera.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/microphone.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/microphone.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/routes.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/routes.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/config.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/run.py" beforeDir="false" afterPath="$PROJECT_DIR$/run.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/static/css/style.css" beforeDir="false" afterPath="$PROJECT_DIR$/static/css/style.css" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/static/js/main.js" beforeDir="false" afterPath="$PROJECT_DIR$/static/js/main.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/index.html" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -170,7 +170,8 @@
       <workItem from="1738815212991" duration="30611000" />
       <workItem from="1738891738024" duration="232000" />
       <workItem from="1738892028266" duration="84000" />
-      <workItem from="1738892695854" duration="12409000" />
+      <workItem from="1738892695854" duration="16593000" />
+      <workItem from="1738918836235" duration="1218000" />
     </task>
     <task id="LOCAL-00001" summary="feat: 初始化项目结构并添加视频分析功能">
       <option name="closed" value="true" />
@@ -460,7 +461,15 @@
       <option name="project" value="LOCAL" />
       <updated>1738898405731</updated>
     </task>
-    <option name="localTasksCounter" value="37" />
+    <task id="LOCAL-00037" summary="refactor(microphone.py, analyzer.py): 增强音频设备初始化逻辑，增加重试机制，优化音频数据处理">
+      <option name="closed" value="true" />
+      <created>1738907217172</created>
+      <option name="number" value="00037" />
+      <option name="presentableId" value="LOCAL-00037" />
+      <option name="project" value="LOCAL" />
+      <updated>1738907217172</updated>
+    </task>
+    <option name="localTasksCounter" value="38" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -500,7 +509,8 @@
     <MESSAGE value="feat: 增加音频回调属性和线程锁，优化流媒体摄像头启动逻辑" />
     <MESSAGE value="refactor(camera.py, routes.py, main.js): 移除冗余控件配置，优化设备更新逻辑" />
     <MESSAGE value="refactor: 优化音频分析器启动逻辑，调整设备选择和状态管理" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor: 优化音频分析器启动逻辑，调整设备选择和状态管理" />
+    <MESSAGE value="refactor(microphone.py, analyzer.py): 增强音频设备初始化逻辑，增加重试机制，优化音频数据处理" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor(microphone.py, analyzer.py): 增强音频设备初始化逻辑，增加重试机制，优化音频数据处理" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -515,6 +525,6 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/Video_Stream_Service$get_rtsp.coverage" NAME="get_rtsp 覆盖结果" MODIFIED="1738848531659" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
-    <SUITE FILE_PATH="coverage/Video_Stream_Service$run.coverage" NAME="run 覆盖结果" MODIFIED="1738906958132" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/Video_Stream_Service$run.coverage" NAME="run 覆盖结果" MODIFIED="1738919326015" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
 </project>

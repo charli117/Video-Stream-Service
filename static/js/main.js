@@ -119,11 +119,9 @@ async function loadDevices() {
         // 更新控件显示状态
         Object.keys(elements).forEach(control => {
             if (elements[control]) {
-                // 始终显示 Refresh Devices 和 Open Analysis 按钮
                 if (control === 'Refresh Devices' || control === 'Open Analysis') {
                     elements[control].style.display = 'block';
                 } else {
-                    // 其他控件根据 controls 数组决定是否显示
                     elements[control].style.display = controls.includes(control) ? 'block' : 'none';
                 }
             }

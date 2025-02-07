@@ -29,7 +29,9 @@ def create_app():
         video_analyzer.start(InitialConfig.DEFAULT_CAMERA_INDEX)
         
         # 获取可用的音频设备
-        available_devices = Microphone.list_devices()
+        mic = Microphone()
+        mic.set_analysis_enabled(True)  # 确保开启音频提取
+        available_devices = mic.list_devices()
         
         if available_devices:
             # 确保设备列表不为空
@@ -37,11 +39,12 @@ def create_app():
             app.logger.info(f"Found {len(available_devices)} audio devices")
             app.logger.info(f"Using audio device: {available_devices[0]['name']} (index: {device_index})")
             
-            # 设置音频设备索引并启动音频分析器
-            audio_analyzer.current_device = device_index  # 先设置设备索引
-            app.logger.info("Starting audio analyzer...")  # P0a33
-            audio_analyzer.start()  # 然后启动分析器
-            app.logger.info("Audio analyzer started successfully.")  # Pb2de
+            # 初始化 Microphone 并开启音频分析功能
+            mic.start(device_index=device_index)  # 请根据实际设备调整索引
+
+            audio_analyzer.microphone = mic
+            audio_analyzer.start(device_index=device_index)
+            app.logger.info("Audio analyzer started successfully.")
         else:
             app.logger.warning("No audio input devices found, audio analysis will be disabled")
             

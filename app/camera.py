@@ -291,29 +291,33 @@ class StreamCamera:
                 if not self.is_running:
                     break
 
-                try:
-                    # 转换音频帧为numpy数组
-                    audio_data = frame.to_ndarray()
+                if not self.analysis_enabled:
+                    continue
 
-                    # 确保数据是float32类型
+                try:
+                    audio_data = frame.to_ndarray()
+                    import numpy as np
+                    if not isinstance(audio_data, np.ndarray):
+                        audio_data = np.array(audio_data)
+                    
                     if audio_data.dtype != np.float32:
                         audio_data = audio_data.astype(np.float32)
 
-                    # 规范化音频数据
                     if audio_data.max() > 1.0:
                         audio_data = audio_data / 32768.0
 
-                    # 检测是否为静音
+                    # 检查静默阈值
                     if np.abs(audio_data).mean() > InitialConfig.AUDIO_CHANGE_THRESHOLD:
-                        # 调用分析方法
                         if self._audio_callback:
                             self._audio_callback(audio_data)
+                    else:
+                        self.logger.debug("检测到静默音频，忽略处理")
 
                 except Exception as e:
-                    self.logger.error(f"Audio frame processing error: {e}")
+                    self.logger.error(f"Error processing audio frame: {str(e)}")
 
         except Exception as e:
-            self.logger.error(f"Audio processing error: {e}")
+            self.logger.error(f"Audio processing loop error: {str(e)}")
             
     @staticmethod
     def is_valid_camera(index):

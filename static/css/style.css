@@ -76,7 +76,7 @@ body {
 }
 
 .button-group {
-    display: flex;
+    display: flex !important;
     align-items: center;
     gap: 10px; /* 可根据需要调整间距 */
     flex-wrap: nowrap;

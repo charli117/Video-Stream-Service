@@ -15,6 +15,11 @@ class Microphone:
         self.channels = InitialConfig.AUDIO_CHANNELS
         self.chunk_size = InitialConfig.AUDIO_CHUNK_SIZE
         self.is_initialized = False
+        self.analysis_enabled = False  # 添加分析启用标志
+
+    def set_analysis_enabled(self, enabled: bool):
+        """设置是否启用音频提取与分析"""
+        self.analysis_enabled = enabled
 
     @staticmethod
     def is_valid_device(index):
@@ -43,13 +48,12 @@ class Microphone:
         """更新设备名称映射"""
         cls._device_names = device_names
 
-    @staticmethod
-    def list_devices():
+    @classmethod
+    def list_devices(cls):
         """列出所有可用音频输入设备"""
         try:
             devices = sd.query_devices()
             available_devices = []
-            logger = logging.getLogger('Microphone')
 
             for i, device in enumerate(devices):
                 if device['max_input_channels'] > 0:
@@ -60,11 +64,9 @@ class Microphone:
                         'sample_rate': device['default_samplerate']
                     }
                     available_devices.append(info)
-                    logger.info(f"Found audio device: {info}")
-
             return available_devices
         except Exception as e:
-            logging.error(f"Error listing audio devices: {str(e)}")
+            cls.logger.error(f"Error listing audio devices: {str(e)}")
             return []
 
     def start(self, device_index=None):
@@ -115,16 +117,33 @@ class Microphone:
                     raise  # Re-raise the exception if all retries failed
 
     def read(self, frames=None, chunk_size=None):
-        """读取音频数据"""
+        """读取音频数据，确保返回 numpy.ndarray 并归一化"""
+        if not self.analysis_enabled:
+            return False, None
+
         if not self.is_initialized or self.stream is None:
+            self.logger.error("Microphone未初始化")
             return False, None
 
         try:
-            # 如果没有指定 frames，则使用 chunk_size，如果 chunk_size 也没有指定，则使用 self.chunk_size
             read_frames = frames if frames else chunk_size if chunk_size else self.chunk_size
             data, overflowed = self.stream.read(read_frames)
             if overflowed:
                 self.logger.warning("Audio input buffer overflowed")
+
+            # 将返回数据转换为 numpy.ndarray
+            import numpy as np
+            if not isinstance(data, np.ndarray):
+                data = np.array(data)
+
+            # 如果数据类型不是float32，转换为float32
+            if data.dtype != np.float32:
+                data = data.astype(np.float32)
+
+            # 归一化音频数据
+            if data.max() > 1.0:
+                data = data / 32768.0
+
             return True, data
 
         except Exception as e:
