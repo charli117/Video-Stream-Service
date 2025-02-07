@@ -5,14 +5,14 @@ class InitialConfig:
     # Flask配置
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev'
 
-    # 流媒体摄像头配置
-    CAMERA_TYPE = 'stream'  # 'stream' or 'local'
+    # 流媒体摄像头配置，支持stream、local
+    CAMERA_TYPE = 'local'
     STREAM_CAMERA_ACCESS_TOKEN = "at.bd1d0zsrdwjf0md3bpq23jky4v51x9xe-8s3fg03m8t-1kmlia0-mw6h93hot"
     STREAM_CAMERA_SERIAL = "G92729163"
     STREAM_CAMERA_PROTOCOL = 3
 
-    # 分析配置
-    ANALYZER_TYPE = ['audio', 'video']
+    # 分析配置,支持 audio、video 两种选择
+    ANALYZER_TYPE = ['audio']
 
     # 视频分析配置
     MAX_QUEUE_SIZE = 32

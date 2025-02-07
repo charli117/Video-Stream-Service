@@ -205,42 +205,41 @@ def start_analysis():
         data = request.get_json()
         enabled = data.get('enabled', False)
         
-        # 检查分析器状态
-        if not video_analyzer.is_running:
-            try:
-                video_analyzer.start(video_analyzer.video_source)
-                if InitialConfig.CAMERA_TYPE != 'stream':
-                    audio_analyzer.start()
-            except Exception as e:
-                logger.error(f"Failed to start analyzers: {str(e)}")
-                return jsonify({
-                    'success': False,
-                    'error': 'Failed to start analyzers'
-                }), 500
+        success = True
+        video_success = audio_success = True
         
-        # 切换分析状态
-        success = video_analyzer.toggle_analysis(enabled)
-        if success:
-            if InitialConfig.CAMERA_TYPE == 'stream':
-                # 对于流式摄像头，直接设置其音频分析状态
-                if hasattr(video_analyzer.camera, 'set_analysis_enabled'):
-                    video_analyzer.camera.set_analysis_enabled(enabled)
-            else:
-                # 本地摄像头模式下同步音频分析器状态
-                audio_analyzer.toggle_analysis(enabled)
+        if 'video' in InitialConfig.ANALYZER_TYPE:
+            video_success = video_analyzer.toggle_analysis(enabled)
+            success &= video_success
+            if not video_success:
+                logger.error("Failed to toggle video analysis")
                 
+        if 'audio' in InitialConfig.ANALYZER_TYPE:
+            # 如果音频分析器尚未启动，先启动它
+            if not audio_analyzer.is_running:
+                try:
+                    audio_analyzer.start(audio_analyzer.current_device)
+                except Exception as e:
+                    logger.error(f"Failed to start audio analyzer before toggling: {str(e)}")
+                    audio_success = False
+            if audio_analyzer.is_running:
+                audio_success = audio_analyzer.toggle_analysis(enabled)
+            success &= audio_success
+            if not audio_success:
+                logger.error("Failed to toggle audio analysis")
+                
+        if success:
             return jsonify({
                 'success': True,
-                'analysis_enabled': video_analyzer.analysis_enabled
+                'analysis_enabled': enabled
             })
         else:
             return jsonify({
                 'success': False,
-                'error': 'Failed to toggle analysis state'
+                'error': 'Failed to toggle analyzers'
             }), 500
-            
     except Exception as e:
-        logger.error(f"Error in toggle_analysis: {str(e)}")
+        logger.error(f"Error in start_analysis: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)

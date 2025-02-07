@@ -574,9 +574,47 @@ class AudioAnalyzer(BaseAnalyzer):
         self.chunk_size = InitialConfig.AUDIO_CHUNK_SIZE
         self.threshold = InitialConfig.AUDIO_CHANGE_THRESHOLD
         self.microphone = Microphone()
-        self.current_device = None  # 添加当前设备属性
-        self._audio_thread = None  # 初始化音频线程属性
-        
+        self.current_device = None  # 当前设备属性
+        self._audio_thread = None  # 音频线程属性
+
+    def start(self, device_index=None):
+        """启动音频分析器，并可接收设备索引参数"""
+        if self.is_running:
+            return
+
+        try:
+            self.logger.info("Starting audio analyzer thread...")
+            # 如果传入设备索引，则使用传入值
+            if device_index is not None:
+                self.current_device = device_index
+            elif self.current_device is None:
+                available_devices = self.microphone.list_devices()
+                if available_devices:
+                    self.current_device = available_devices[0]['index']
+                else:
+                    raise RuntimeError("No audio devices available")
+
+            # 使用传入或选定的设备启动音频设备
+            self.microphone.start(self.current_device)
+
+            # 明确设置为正在运行
+            self.is_running = True
+
+            # 启动音频采集线程
+            self._audio_thread = Thread(target=self.generate_audio, name="AudioCaptureThread")
+            self._audio_thread.daemon = True
+            self._audio_thread.start()
+            self.logger.info("Audio capture thread started")
+
+            # 启动父类线程管理（如果父类内部有额外处理）
+            super().start()
+            self.logger.info(f"AudioAnalyzer started successfully with device {self.current_device}")
+
+        except Exception as e:
+            self.is_running = False
+            self.logger.error(f"Failed to start audio analyzer: {str(e)}")
+            raise
+
     def switch_audio(self, device_index):
         """切换音频输入设备"""
         try:
@@ -600,40 +638,6 @@ class AudioAnalyzer(BaseAnalyzer):
             except Exception as e:
                 self.logger.error(f"Error generating audio: {str(e)}")
             time.sleep(0.01)
-
-    def start(self):
-        """启动音频分析器"""
-        if self.is_running:
-            return
-
-        try:
-            self.logger.info("Starting audio analyzer thread...")  # P6645
-            # 如果没有设置当前设备，使用默认设备
-            if self.current_device is None:
-                available_devices = self.microphone.list_devices()
-                if available_devices:
-                    self.current_device = available_devices[0]['index']
-                else:
-                    raise RuntimeError("No audio devices available")
-
-            # 初始化并启动音频设备
-            self.microphone.start(self.current_device)
-
-            # 启动音频采集线程
-            self._audio_thread = Thread(target=self.generate_audio, name="AudioCaptureThread")
-            self._audio_thread.daemon = True
-            self._audio_thread.start()
-            self.logger.info("Audio capture thread started")
-
-            # 启动父类的线程管理机制
-            super().start()
-
-            self.logger.info(f"AudioAnalyzer started successfully with device {self.current_device}")  # Pbf3e
-
-        except Exception as e:
-            self.is_running = False
-            self.logger.error(f"Failed to start audio analyzer: {str(e)}")  # P457d
-            raise
 
     def stop(self):
         """停止音频分析器"""

@@ -61,9 +61,9 @@ body {
 
 .button-group {
     display: flex;
-    gap: 10px;
-    flex-wrap: nowrap;  /* 防止按钮换行 */
     align-items: center;
+    gap: 10px; /* 可根据需要调整间距 */
+    flex-wrap: nowrap;
 }
 
 .button-group button {

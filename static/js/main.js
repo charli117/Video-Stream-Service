@@ -138,8 +138,8 @@ async function loadDevices() {
         const currentCameraValue = cameraSelect.value;
         
         // 清空选项但保留第一个默认选项
-        while (cameraSelect.options.length > 1) {
-            cameraSelect.remove(1);
+        while (cameraSelect.options.length > 0) {
+            cameraSelect.remove(0);
         }
         
         if (data.cameras && data.cameras.length > 0) {
@@ -168,8 +168,8 @@ async function loadDevices() {
         const currentAudioValue = audioSelect.value;
         
         // 清空选项但保留第一个默认选项
-        while (audioSelect.options.length > 1) {
-            audioSelect.remove(1);
+        while (audioSelect.options.length > 0) {
+            audioSelect.remove(0);
         }
         
         if (data.audioDevices && data.audioDevices.length > 0) {
@@ -193,21 +193,15 @@ async function loadDevices() {
             }
         }
 
-        // 重新初始化 select 元素的样式
-        if (typeof $ !== 'undefined') {
-            $(cameraSelect).selectpicker('refresh');
-            $(audioSelect).selectpicker('refresh');
+        // 完全清空 cameraSelect 和 audioSelect 内所有选项
+        // while (cameraSelect.options.length > 0) {
+        //     cameraSelect.remove(0);
+        // }
+        while (audioSelect.options.length > 0) {
+            audioSelect.remove(0);
         }
 
-        // 为本地摄像头模式添加change事件监听
-        if (data.controls.includes('cameraSelect') && !data.controls.includes('Switch Devices')) {
-            cameraSelect.onchange = () => switchDevices();
-        } else {
-            cameraSelect.innerHTML = '<option value="">No cameras found</option>';
-        }
-
-        // 更新音频设备选择
-        audioSelect.innerHTML = '';
+        // 添加音频设备选项
         if (data.audioDevices && data.audioDevices.length > 0) {
             data.audioDevices.forEach(device => {
                 const option = document.createElement('option');
@@ -218,13 +212,21 @@ async function loadDevices() {
                 }
                 audioSelect.appendChild(option);
             });
-            
-            // 为本地音频设备模式添加change事件监听
-            if (data.controls.includes('audioSelect') && !data.controls.includes('Switch Devices')) {
-                audioSelect.onchange = () => switchDevices();
-            }
         } else {
-            audioSelect.innerHTML = '<option value="">No audio devices found</option>';
+            const option = document.createElement('option');
+            option.value = "";
+            option.text = "No audio devices found";
+            audioSelect.appendChild(option);
+        }
+
+        // 恢复之前选中的音频设备（如果有）
+        if (currentAudioValue) {
+            audioSelect.value = currentAudioValue;
+        }
+        
+        // 绑定事件监听
+        if (data.controls.includes('audioSelect') && !data.controls.includes('Switch Devices')) {
+            audioSelect.onchange = () => switchDevices();
         }
 
         // 5. 更新当前设备状态
@@ -407,20 +409,6 @@ function startStatusUpdates() {
     statusUpdateInterval = setInterval(updateStatus, 500);
 }
 
-// 页面加载完成后启动状态更新
-document.addEventListener('DOMContentLoaded', () => {
-    loadDevices();
-    startStatusUpdates();
-    updateButtonColor();
-});
-
-// 只保留这一个事件监听器
-document.addEventListener('DOMContentLoaded', () => {
-    loadDevices();  // 使用新的 loadDevices 替换 loadCameras
-    startStatusUpdates();
-    updateButtonColor();
-});
-
 window.addEventListener('beforeunload', async function(e) {
     try {
         // 在页面刷新前尝试清理资源
@@ -440,24 +428,22 @@ let toggleAnalysisTimeout;
 
 function toggleAnalysis() {
     const analysisToggle = document.getElementById('analysisToggle');
-    const isEnabled = analysisToggle.textContent === 'Open Analysis';
+    // 根据 data-enabled 属性判断状态
+    let isEnabled = analysisToggle.getAttribute('data-enabled') === 'true';
     
-    // 禁用按钮防止重复点击
     analysisToggle.disabled = true;
     
-    // 清除之前的定时器
     if (toggleAnalysisTimeout) {
         clearTimeout(toggleAnalysisTimeout);
     }
     
-    // 设置新的定时器
     toggleAnalysisTimeout = setTimeout(() => {
         fetch('/api/toggle_analysis', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ enabled: isEnabled })
+            body: JSON.stringify({ enabled: !isEnabled })
         })
         .then(response => {
             if (!response.ok) {
@@ -469,22 +455,27 @@ function toggleAnalysis() {
         })
         .then(data => {
             if (data.success) {
-                analysisToggle.textContent = data.analysis_enabled ? 'Close Analysis' : 'Open Analysis';
+                // 更新 data-enabled 属性记录当前状态
+                analysisToggle.setAttribute('data-enabled', data.analysis_enabled);
+                analysisToggle.innerHTML = data.analysis_enabled 
+                    ? '<i class="fas fa-stop"></i> Close Analysis'
+                    : '<i class="fas fa-play"></i> Open Analysis';
                 updateButtonColor();
                 saveButtonState();
-                hideError();  // 成功时隐藏错误信息
+                hideError();
             } else {
                 throw new Error(data.error || 'Failed to toggle analysis');
             }
         })
         .catch(error => {
             showError('Error toggling analysis: ' + error.message);
-            // 发生错误时恢复按钮状态
-            analysisToggle.textContent = isEnabled ? 'Close Analysis' : 'Open Analysis';
+            // 回滚状态显示
+            analysisToggle.innerHTML = isEnabled 
+                ? '<i class="fas fa-stop"></i> Close Analysis'
+                : '<i class="fas fa-play"></i> Open Analysis';
             updateButtonColor();
         })
         .finally(() => {
-            // 重新启用按钮
             analysisToggle.disabled = false;
         });
     }, 300);
@@ -493,19 +484,11 @@ function toggleAnalysis() {
 // 更新按钮颜色的函数
 function updateButtonColor() {
     const analysisToggle = document.getElementById('analysisToggle');
-    const icon = document.createElement('i');
-    if (analysisToggle.textContent === 'Close Analysis') {
+    if (analysisToggle.textContent.trim() === 'Close Analysis') {
         analysisToggle.style.backgroundColor = 'red';
-        icon.className = 'fas fa-stop';
-        icon.style.marginRight = '5px';
-        icon.style.display = 'inline-block';
     } else {
         analysisToggle.style.backgroundColor = '';
-        icon.className = 'fas fa-play';
-        icon.style.marginRight = '5px';
-        icon.style.display = 'inline-block';
     }
-    analysisToggle.appendChild(icon);
 }
 
 // 保存按钮状态到 localStorage
@@ -529,7 +512,7 @@ async function updateStatus() {
             const currentState = analysisToggle.textContent === 'Close Analysis';
             // 只在状态确实发生变化时才更新
             if (currentState !== status.analysis_enabled) {
-                analysisToggle.textContent = status.analysis_enabled ? 'Close Analysis' : 'Open Analysis';
+                analysisToggle.innerHTML = '<i class="fas fa-sync"></i> ' + (status.analysis_enabled ? 'Close Analysis' : 'Open Analysis');
                 updateButtonColor();
                 saveButtonState();
             }
@@ -569,7 +552,7 @@ async function updateStatus() {
 
         // 更新分析按钮状态
         if (analysisToggle) {
-            analysisToggle.textContent = status.analysis_enabled ? 'Close Analysis' : 'Open Analysis';
+            analysisToggle.innerHTML = status.analysis_enabled ? '<i class="fas fa-stop"></i> Close Analysis' : '<i class="fas fa-play"></i> Open Analysis';
             updateButtonColor();
         }
 
