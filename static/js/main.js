@@ -65,9 +65,12 @@ async function loadDevices() {
                 deviceNames[index] = device.label || `Camera ${index}`;
             });
 
-            audioDevices.forEach((device, index) => {
-                audioDeviceNames[index] = device.label || `Audio Device ${index}`;
-            });
+            // 只在本地模式下处理音频设备
+            if (window.CAMERA_TYPE === 'local') {
+                audioDevices.forEach((device, index) => {
+                    audioDeviceNames[index] = device.label || `Audio Device ${index}`;
+                });
+            }
 
             // 发送设备名称到服务器
             await fetch('/api/device_names', {
@@ -88,6 +91,20 @@ async function loadDevices() {
         
         if (data.error) {
             throw new Error(data.error);
+        }
+
+        // 如果是流模式，则触发重连
+        if (window.CAMERA_TYPE === 'stream') {
+            await fetch("/api/devices/switch", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    camera_index: 0,  // 流模式固定使用索引0
+                    audio_index: 0
+                })
+            });
         }
 
         // 3. 更新控件显示状态

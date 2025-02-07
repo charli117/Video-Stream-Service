@@ -4,7 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="c7800c4b-088e-4c62-8313-176bf30b8a3d" name="更改" comment="" />
+    <list default="true" id="c7800c4b-088e-4c62-8313-176bf30b8a3d" name="更改" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/camera.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/camera.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/routes.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/routes.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/static/js/main.js" beforeDir="false" afterPath="$PROJECT_DIR$/static/js/main.js" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -157,7 +163,7 @@
       <workItem from="1738673000504" duration="115000" />
       <workItem from="1738673138234" duration="13668000" />
       <workItem from="1738716159262" duration="38152000" />
-      <workItem from="1738815212991" duration="26645000" />
+      <workItem from="1738815212991" duration="29165000" />
     </task>
     <task id="LOCAL-00001" summary="feat: 初始化项目结构并添加视频分析功能">
       <option name="closed" value="true" />
@@ -415,7 +421,15 @@
       <option name="project" value="LOCAL" />
       <updated>1738863183157</updated>
     </task>
-    <option name="localTasksCounter" value="33" />
+    <task id="LOCAL-00033" summary="refactor(camera.py, routes.py, main.js): 移除冗余控件配置，优化设备更新逻辑">
+      <option name="closed" value="true" />
+      <created>1738863447414</created>
+      <option name="number" value="00033" />
+      <option name="presentableId" value="LOCAL-00033" />
+      <option name="project" value="LOCAL" />
+      <updated>1738863447414</updated>
+    </task>
+    <option name="localTasksCounter" value="34" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -452,9 +466,9 @@
     <MESSAGE value="feat: 增加音频设备切换，优化设备管理逻辑" />
     <MESSAGE value="feat: 增加流媒体摄像头支持及音频处理" />
     <MESSAGE value="feat: 更新按钮文本及增加流媒体摄像头支持" />
-    <MESSAGE value="refactor(camera.py, routes.py, main.js): 移除冗余控件配置，优化设备更新逻辑" />
     <MESSAGE value="feat: 增加音频回调属性和线程锁，优化流媒体摄像头启动逻辑" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat: 增加音频回调属性和线程锁，优化流媒体摄像头启动逻辑" />
+    <MESSAGE value="refactor(camera.py, routes.py, main.js): 移除冗余控件配置，优化设备更新逻辑" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor(camera.py, routes.py, main.js): 移除冗余控件配置，优化设备更新逻辑" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -469,6 +483,6 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/Video_Stream_Service$get_rtsp.coverage" NAME="get_rtsp 覆盖结果" MODIFIED="1738848531659" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
-    <SUITE FILE_PATH="coverage/Video_Stream_Service$run.coverage" NAME="run 覆盖结果" MODIFIED="1738863170113" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/Video_Stream_Service$run.coverage" NAME="run 覆盖结果" MODIFIED="1738889502211" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
 </project>

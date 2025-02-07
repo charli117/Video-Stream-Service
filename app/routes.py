@@ -33,11 +33,15 @@ def get_devices():
     """获取设备列表"""
     try:
         cameras = Camera.list_cameras()
-        audio_devices = Microphone.list_devices()
+        
+        # 只在本地模式下获取音频设备
+        audio_devices = []
+        if InitialConfig.CAMERA_TYPE == 'local':
+            audio_devices = Microphone.list_devices()
         
         # 根据 CAMERA_TYPE 返回不同的控件配置
         if InitialConfig.CAMERA_TYPE == 'local':
-            controls = ['cameraSelect', 'audioSelect', 'Refresh Devices', 'Open Analysis']
+            controls = ['cameraSelect', 'audioSelect', 'Refresh Devices']
         else:
             controls = ['Refresh Devices', 'Open Analysis']
             
@@ -45,7 +49,7 @@ def get_devices():
             'cameras': cameras,
             'audioDevices': audio_devices,
             'currentCamera': video_analyzer.video_source,
-            'currentAudioDevice': audio_analyzer.current_device,
+            'currentAudioDevice': audio_analyzer.current_device if InitialConfig.CAMERA_TYPE == 'local' else None,
             'controls': controls
         })
     except Exception as e:

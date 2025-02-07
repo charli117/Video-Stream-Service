@@ -333,14 +333,20 @@ class StreamCamera:
     @staticmethod
     def list_cameras():
         """列出所有可用摄像头"""
-        return [{
-            'index': 0,
-            'name': StreamCamera._device_names.get('0', 'Stream Camera 0'),
-            'width': 1920,
-            'height': 1080,
-            'fps': 30,
-            'controls': ['cameraSelect', 'audioSelect']
-        }]
+        # 每次获取设备列表时都重新获取流地址以验证有效性
+        try:
+            url = StreamCamera.get_stream_url()
+            if url:
+                return [{
+                    'index': 0,
+                    'name': StreamCamera._device_names.get('0', 'Stream Camera 0'),
+                    'width': 1920,
+                    'height': 1080,
+                    'fps': 30
+                }]
+        except Exception as e:
+            logging.error(f"Error getting stream URL: {e}")
+        return []
 
     @staticmethod
     def get_stream_url() -> Optional[str]:
@@ -377,6 +383,7 @@ class StreamCamera:
             # 确保在重新启动前清理旧的连接
             self.cleanup()
             
+            # 每次启动都重新获取流地址
             rtmp_url = self.get_stream_url()
             if not rtmp_url:
                 raise ValueError("RTMP URL is required")

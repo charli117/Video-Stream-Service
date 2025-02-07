@@ -6,10 +6,13 @@ class InitialConfig:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev'
 
     # 流媒体摄像头配置
-    CAMERA_TYPE = 'local'  # 'stream' or 'local'
+    CAMERA_TYPE = 'stream'  # 'stream' or 'local'
     STREAM_CAMERA_ACCESS_TOKEN = "at.bd1d0zsrdwjf0md3bpq23jky4v51x9xe-8s3fg03m8t-1kmlia0-mw6h93hot"
     STREAM_CAMERA_SERIAL = "G92729163"
     STREAM_CAMERA_PROTOCOL = 3
+
+    # 分析配置
+    ANALYZER_TYPE = ['audio', 'video']
 
     # 视频分析配置
     MAX_QUEUE_SIZE = 32
@@ -20,7 +23,7 @@ class InitialConfig:
     MAX_SAVED_IMAGES = 1000
     CHANGE_FRAME_THRESHOLD = 6
 
-    # Audio Configuration
+    # 音频分析配置
     AUDIO_SAMPLE_RATE = 44100
     AUDIO_CHUNK_SIZE = 4096
     AUDIO_CHANNELS = 1
