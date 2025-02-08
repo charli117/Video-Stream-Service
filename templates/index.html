@@ -36,10 +36,15 @@
         </div>
 
         <div class="main-content">
-            <div class="video-container">
-                <img id="videoFeed" src="{{ url_for('main.video_feed') }}" alt="Video Feed">
+            <div class="left-panel">
+                <!-- 添加视频流容器的标题和样式 -->
+                <div class="video-container">
+                    <h2><i class="fas fa-video"></i> Video Stream</h2>
+                    <div class="video-wrapper">
+                        <img id="videoFeed" src="{{ url_for('main.video_feed') }}" alt="Video Feed">
+                    </div>
+                </div>
             </div>
-
             <div class="status-panel">
                 <h2>System Status</h2>
                 <div class="status" id="status">

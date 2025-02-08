@@ -15,6 +15,9 @@ body {
     flex-direction: column;
     min-height: 100vh;
     padding: 20px;
+    max-width: 100%;
+    margin: 0 auto;
+    box-sizing: border-box;
 }
 
 /* 头部样式 */
@@ -39,12 +42,11 @@ body {
     background-color: white;
     padding: 20px;
     border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    margin-bottom: 20px;
-    width: 90%;
-    max-width: 1200px;
-    margin-left: auto;
-    margin-right: auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15); /* 增加阴影效果 */
+    margin: 0 auto 20px;
+    width: 100%;
+    max-width: 1400px; /* 与 main-content 相同的最大宽度 */
+    box-sizing: border-box;
 }
 
 .camera-select {
@@ -129,39 +131,61 @@ button i {
 .main-content {
     display: flex;
     gap: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
-    width: 90%;
-    max-width: 1200px;
     margin: 0 auto;
+    max-width: 1400px;
+    align-items: start;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.left-panel {
+    flex: 1.6; /* 增加左侧比例 */
+    display: flex;
+    flex-direction: column;
+    gap: 20px; /* 减小间距 */
 }
 
 .video-container {
-    flex: 1;
-    min-width: 300px;
-    background-color: white;
-    padding: 20px;
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    background: white;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    overflow: hidden;
 }
 
-.video-container img {
+.video-container h2 {
+    margin: 0 0 15px 0;
+    font-size: 18px;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.video-container h2 i {
+    color: #4CAF50;
+}
+
+.video-wrapper {
+    width: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #eee;
+}
+
+.video-wrapper img {
     width: 100%;
     height: auto;
-    border-radius: 6px;
+    display: block;
 }
 
-/* 状态面板 */
 .status-panel {
-    width: 300px;
-    background-color: white;
+    background: white;
     padding: 20px;
     border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    padding: 20px;
-    background: #f5f5f5;
-    border-radius: 8px;
-    margin-top: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    width: 300px; /* 添加固定宽度 */
+    flex-shrink: 0; /* 防止在flex布局下被压缩 */
 }
 
 .status-panel h2 {
@@ -171,17 +195,19 @@ button i {
 }
 
 .status {
-    display: flex;
     flex-direction: column;
     gap: 15px;
 }
 
 .status p {
     margin: 0;
+    margin-bottom: 4px;
     display: flex;
     align-items: center;
-    gap: 10px;
     color: #666;
+    padding: 10px;
+    border-radius: 6px;
+    background: #f8f9fa;
 }
 
 .status i {
@@ -191,24 +217,23 @@ button i {
 
 /* 错误提示 */
 .error {
-    color: #d32f2f;
-    background-color: #ffebee;
+    color: #721c24;
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
     padding: 10px 15px;
-    border-radius: 6px;
-    margin-top: 10px;
+    margin: 10px 0;
+    border-radius: 4px;
     display: flex;
     align-items: center;
     gap: 10px;
 }
 
-.error::before {
-    content: '\f071';
-    font-family: 'Font Awesome 5 Free';
-    font-weight: 900;
+.error i {
+    color: #dc3545;
 }
 
 /* 响应式设计 */
-@media (max-width: 768px) {
+@media (max-width: 700px) {
     .camera-select {
         flex-direction: column;
         align-items: stretch;
@@ -254,24 +279,17 @@ button i {
     }
 }
 .changes-log {
-    margin-top: 20px;
-    padding: 15px;
+    margin-top: 10px;
+    padding: 20px;
+    border-radius: 8px;
     background: white;
-    border-radius: 6px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-}
-
-.changes-log h3 {
-    margin-top: 0;
-    margin-bottom: 15px;
-    color: #333;
-    font-size: 16px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
 }
 
 .log-entries {
-    max-height: 200px;
-    overflow-y: auto;
-    padding-right: 10px;
+    max-height: 300px;
+    padding-right: 15px;
+    margin-top: 15px;
 }
 
 .log-entry {
@@ -309,16 +327,63 @@ button i {
 
 .log-entries::-webkit-scrollbar-track {
     background: #f1f1f1;
+    border-radius: 3px;
 }
 
 .log-entries::-webkit-scrollbar-thumb {
-    background: #888;
+    background: #ccc;
     border-radius: 3px;
 }
 
 .log-entries::-webkit-scrollbar-thumb:hover {
-    background: #555;
+    background: #999;
 }
+
+/* 修改播放状态的样式 */
+.log-entry.playing {
+    background-color: #e3f2fd !important; /* 使用 !important 确保优先级 */
+    border-radius: 4px;
+    padding: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+.log-entry.playing .change-time {
+    color: #1565c0;
+    font-weight: 500;
+}
+
+.log-entry.playing .change-time i {
+    animation: pulse-icon 2s infinite;
+    color: #1565c0;
+}
+
+@keyframes pulse-icon {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.2);
+        opacity: 0.8;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* 添加悬停效果 */
+.log-entry:hover:not(.playing) {
+    background-color: #f5f5f5;
+    border-radius: 4px;
+}
+
+/* 删除或修改这个规则，因为它会覆盖播放状态 */
+.log-entry.playing:hover {
+    background-color: #e3f2fd !important; /* 与播放状态保持一致 */
+}
+
 .image-viewer {
     position: fixed;
     top: 0;
@@ -388,8 +453,9 @@ button i {
 
 .select-group {
     display: flex;
-    gap: 15px;
+    gap: 20px; /* 增加间距 */
     align-items: center;
+    margin-bottom: 15px;
     flex: 2;
 }
 
@@ -413,18 +479,41 @@ button i {
         width: 100%;
     }
 }
-.error {
-    color: #721c24;
-    background-color: #f8d7da;
-    border: 1px solid #f5c6cb;
-    padding: 10px 15px;
-    margin: 10px 0;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
+
+/* 添加响应式布局 */
+@media (max-width: 1200px) {
+    .controls,
+    .main-content {
+        width: 100%;
+        padding: 15px;
+    }
+
+    .main-content {
+        flex-direction: column;
+    }
+
+    .left-panel,
+    .status-panel {
+        flex: none;
+        width: 100%; /* 在小屏幕下还是需要100%宽度 */
+    }
 }
 
-.error i {
-    color: #dc3545;
+/* 增加选择器优先级 */
+.log-entries .log-entry.playing {
+    background-color: #e3f2fd !important;
+    border-radius: 4px;
+    padding: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+.log-entries .log-entry.playing .change-time {
+    color: #1565c0 !important;
+    font-weight: 500;
+}
+
+.log-entries .log-entry.playing .change-time i {
+    animation: pulse-icon 2s infinite;
+    color: #1565c0 !important;
 }

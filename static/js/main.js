@@ -108,7 +108,7 @@ function updateLogsDisplay() {
                         const timeString = date.toLocaleString('zh-CN');
                         return `
                             <div class="log-entry">
-                                <a href="javascript:void(0)" onclick="playAudioSegment('${change.audio_url}')" class="change-time">
+                                <a href="javascript:void(0)" onclick="playAudioSegment('${change.audio_url}', this)" class="change-time">
                                     <i class="fas fa-volume-up"></i>
                                     ${timeString}
                                 </a>
@@ -517,9 +517,41 @@ function hideError() {
     error.style.display = 'none';
 }
 
-function playAudioSegment(audioUrl) {
+function playAudioSegment(audioUrl, element) {
+    // 移除其他播放项的状态
+    document.querySelectorAll('.log-entry.playing').forEach(entry => {
+        entry.classList.remove('playing');
+    });
+
+    // 为当前项添加播放状态
+    const currentEntry = element.closest('.log-entry');
+    currentEntry.classList.add('playing');
+
+    // 创建音频对象
     const audio = new Audio(audioUrl);
-    audio.play();
+
+    // 添加时间戳属性用于状态恢复
+    const timeAttr = element.getAttribute('data-time');
+    if (timeAttr) {
+        currentEntry.setAttribute('data-playing-time', timeAttr);
+    }
+
+    // 播放结束时移除状态
+    audio.onended = () => {
+        currentEntry.classList.remove('playing');
+    };
+
+    // 错误处理
+    audio.onerror = () => {
+        currentEntry.classList.remove('playing');
+        showError('音频播放失败');
+    };
+
+    // 开始播放
+    audio.play().catch(error => {
+        currentEntry.classList.remove('playing');
+        showError('音频播放失败: ' + error.message);
+    });
 }
 
 // 定期更新状态
@@ -650,12 +682,12 @@ async function updateStatus() {
         }
         
         statusHtml = `
-            <p>Status: ${status.is_running ? 'Running' : 'Stopped'}</p>
-            <p>Camera: ${status.current_camera_name || 'None'}</p>
-            <p>Audio: ${status.current_audio_name || 'None'}</p>
-            <p>Resolution: ${status.camera_info.width || 0}x${status.camera_info.height || 0}</p>
-            <p>FPS: ${status.fps || 0}</p>
-            <p>Analysis: ${status.analysis_enabled ? 'Enabled' : 'Disabled'}</p>
+            <p><i class="fas fa-circle ${status.is_running ? 'text-success' : 'text-danger'}"></i> Status: ${status.is_running ? 'Running' : 'Stopped'}</p>
+            <p><i class="fas fa-video"></i> Camera: ${status.current_camera_name || 'None'}</p>
+            <p><i class="fas fa-microphone"></i> Audio: ${status.current_audio_name || 'None'}</p>
+            <p><i class="fas fa-expand"></i> Resolution: ${status.camera_info.width || 0}x${status.camera_info.height || 0}</p>
+            <p><i class="fas fa-tachometer-alt"></i> FPS: ${status.fps || 0}</p>
+            <p><i class="fas fa-analytics"></i> Analysis: ${status.analysis_enabled ? 'Enabled' : 'Disabled'}</p>
         `;
         
         if (!status.devices_ready) {
@@ -740,6 +772,10 @@ async function updateStatus() {
         // 独立更新 Audio Changes Log
         const audioLogDiv = document.getElementById('audio-changes-log');
         if (audioLogDiv) {
+            const currentPlayingEntry = document.querySelector('.log-entry.playing');
+            const currentPlayingTime = currentPlayingEntry ? 
+                currentPlayingEntry.querySelector('.change-time').getAttribute('data-time') : null;
+
             const audioLogHtml = `
                 <h3>Audio Changes Log</h3>
                 <div class="log-entries">
@@ -748,8 +784,11 @@ async function updateStatus() {
                             const date = new Date(change.time * 1000);
                             const timeString = date.toLocaleString('zh-CN');
                             return `
-                                <div class="log-entry">
-                                    <a href="javascript:void(0)" onclick="playAudioSegment('${change.audio_url}')" class="change-time">
+                                <div class="log-entry ${change.time === currentPlayingTime ? 'playing' : ''}">
+                                    <a href="javascript:void(0)" 
+                                       onclick="playAudioSegment('${change.audio_url}', this)"
+                                       class="change-time"
+                                       data-time="${change.time}">
                                         <i class="fas fa-volume-up"></i>
                                         ${timeString}
                                     </a>
@@ -790,7 +829,7 @@ async function updateStatus() {
                     const timeString = date.toLocaleString('zh-CN');
                     return `
                         <div class="log-entry">
-                            <a href="javascript:void(0)" onclick="playAudioSegment('${change.audio_url}')" class="change-time">
+                            <a href="javascript:void(0)" onclick="playAudioSegment('${change.audio_url}', this)" class="change-time">
                                 <i class="fas fa-volume-up"></i>
                                 ${timeString}
                             </a>
