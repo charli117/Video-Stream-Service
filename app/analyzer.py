@@ -32,12 +32,12 @@ class BaseAnalyzer:
         self.output_dir = InitialConfig.OUTPUT_DIR
         self.max_saved_files = InitialConfig.MAX_SAVED_FILES
         self.analysis_enabled = False
-        
+
     def start(self):
         """启动分析器"""
         if self.is_running:
             return
-        
+
         try:
             self.is_running = True
             self._setup_logging()
@@ -58,7 +58,7 @@ class BaseAnalyzer:
         """
         if not self.is_running:
             return
-            
+
         self.is_running = False
         for thread in self._threads:
             thread.join(timeout=1.0)
@@ -70,15 +70,15 @@ class BaseAnalyzer:
         清理旧文件
         根据文件扩展名检查输出目录中保存的文件数量，
         如果超过最大保留数量则按照文件修改时间排序删除最旧的文件。
-        
+
         Args:
             extension (str): 文件扩展名，如 '.jpg' 或 '.wav'
             max_files (int|None): 最大允许保留文件数，默认为配置中的值
         """
         try:
             if max_files is None:
-                max_files = (InitialConfig.MAX_SAVED_IMAGES 
-                             if extension == '.jpg' 
+                max_files = (InitialConfig.MAX_SAVED_IMAGES
+                             if extension == '.jpg'
                              else InitialConfig.MAX_SAVED_FILES)
 
             files = [f for f in os.listdir(self.output_dir) if f.endswith(extension)]
@@ -96,10 +96,10 @@ class BaseAnalyzer:
         1. 记录当前状态和目标状态
         2. 若状态未改变则直接返回
         3. 改变状态、清理队列（当关闭分析时）及记录日志
-        
+
         Args:
             enabled (bool): 目标状态，True 表示启动分析，False 表示关闭分析
-        
+
         Returns:
             bool: 状态切换是否成功
         """
@@ -110,29 +110,29 @@ class BaseAnalyzer:
                 if not self.is_running:
                     self.logger.warning("Cannot toggle analysis when analyzer is not running")
                     return False
-                    
+
                 # 检查状态是否需要改变
                 if self.analysis_enabled == enabled:
                     self.logger.info(f"Analysis already {enabled}, no change needed")  # 添加日志
                     return True
-                    
+
                 previous_state = self.analysis_enabled
                 self.analysis_enabled = enabled
-                
+
                 # 清理队列
                 if not enabled:
                     self._clear_queues()
-                    
+
                 # 记录状态变化
                 self.logger.info(f"Analysis state changed from {previous_state} to {enabled}")
-                
+
                 if enabled:
                     self.logger.info("Analysis started - monitoring for changes")
                 else:
                     self.logger.info("Analysis stopped - no longer monitoring")
-                    
+
                 return True
-                
+
             except Exception as e:
                 self.logger.error(f"Error toggling analysis: {str(e)}")
                 return False
@@ -191,7 +191,7 @@ class BaseAnalyzer:
         保存音频文件
         Args:
             audio_data: 音频数据信息
-        
+
         Returns:
             dict: 包含保存文件信息的数据字典
         """
@@ -223,8 +223,8 @@ class BaseAnalyzer:
 
             # 保存音频
             sf.write(
-                filepath, 
-                audio_data, 
+                filepath,
+                audio_data,
                 InitialConfig.AUDIO_SAMPLE_RATE,
                 format='WAV',
                 subtype='FLOAT'
@@ -306,14 +306,14 @@ class BaseAnalyzer:
     def _start_threads(self):
         """启动分析线程"""
         self._threads = [
-            Thread(target=self._thread_wrapper, 
+            Thread(target=self._thread_wrapper,
                    args=(self._analyze_loop, "analyze"),
                    name="AnalyzeThread"),
-            Thread(target=self._thread_wrapper, 
+            Thread(target=self._thread_wrapper,
                    args=(self._llm_loop, "llm"),
                    name="LLMThread")
         ]
-        
+
         for thread in self._threads:
             thread.daemon = True
             thread.start()
@@ -364,9 +364,7 @@ class BaseAnalyzer:
 class VideoAnalyzer(BaseAnalyzer):
     def __init__(self):
         super().__init__()
-        # 添加 logger 初始化
         self.logger = logging.getLogger('VideoAnalyzer')
-        # VideoAnalyzer 特有的属性
         self.last_frame = None
         self.fps = 0
         self.camera = Camera()
@@ -381,20 +379,20 @@ class VideoAnalyzer(BaseAnalyzer):
         try:
             if self.is_running:
                 return True
-                
+
             self.video_source = video_source
             self.camera.start(video_source)
-            
+
             # 确保摄像头正确初始化
             if not self.camera.is_initialized:
                 raise RuntimeError("Camera failed to initialize")
-                
+
             self.is_running = True
             self._setup_logging()
             self._start_threads()
             self.logger.info("VideoAnalyzer started successfully")
             return True
-        
+
         except Exception as e:
             self.is_running = False
             self.logger.error(f"Failed to start VideoAnalyzer: {str(e)}")
@@ -436,14 +434,14 @@ class VideoAnalyzer(BaseAnalyzer):
         """生成视频流"""
         consecutive_errors = 0
         max_consecutive_errors = 5
-        
+
         while self.is_running:
             try:
                 if not self.camera.is_initialized:
                     self.logger.error("Camera is not initialized")
                     time.sleep(1)
                     continue
-                
+
                 ret, frame = self.camera.read()
                 if not ret or frame is None:
                     consecutive_errors += 1
@@ -453,7 +451,7 @@ class VideoAnalyzer(BaseAnalyzer):
                         break
                     time.sleep(0.1)
                     continue
-                
+
                 consecutive_errors = 0  # 重置错误计数
                 frame = self._resize_frame(frame)
                 if frame is None:
@@ -471,7 +469,7 @@ class VideoAnalyzer(BaseAnalyzer):
                 if not ret:
                     self.logger.error("Failed to encode frame")
                     continue
-                
+
                 yield (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n\r\n' +
                        buffer.tobytes() + b'\r\n')
@@ -486,6 +484,7 @@ class VideoAnalyzer(BaseAnalyzer):
 
     def _analyze_loop(self):
         """分析视频帧的循环"""
+
         def check_frame_change(frame1, frame2):
             try:
                 if frame1 is None or frame2 is None:
@@ -562,36 +561,36 @@ class VideoAnalyzer(BaseAnalyzer):
         2. 转换至LAB色彩空间，并只对光照通道应用CLAHE增强
         3. 合并通道并转换回BGR色彩空间
         4. 调整亮度和对比度
-        
+
         Args:
             frame: 输入的视频帧数据
-        
+
         Returns:
             处理后的帧数据
         """
         try:
             # 轻微的高斯模糊去噪，kernel size减小为(3,3)以保留更多细节
             denoised = cv2.GaussianBlur(frame, (3, 3), 0)
-            
+
             # 转换到LAB色彩空间
             lab = cv2.cvtColor(denoised, cv2.COLOR_BGR2LAB)
             l, a, b = cv2.split(lab)
-            
+
             # 使用更温和的CLAHE参数
             clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
             cl = clahe.apply(l)
-            
+
             # 合并通道
             enhanced = cv2.merge((cl, a, b))
             enhanced = cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
-            
+
             # 轻微调整亮度和对比度
             alpha = 1.1  # 降低对比度增强
-            beta = 5    # 降低亮度提升
+            beta = 5  # 降低亮度提升
             adjusted = cv2.convertScaleAbs(enhanced, alpha=alpha, beta=beta)
-            
+
             return adjusted
-            
+
         except Exception as e:
             self.logger.error(f"Frame preprocessing failed: {str(e)}")
             return frame
@@ -603,7 +602,7 @@ class VideoAnalyzer(BaseAnalyzer):
 
         try:
             height, width = frame.shape[:2]
-            if (height > self.max_display_height):
+            if height > self.max_display_height:
                 scale = self.max_display_height / height
                 new_width = int(width * scale)
                 new_height = self.max_display_height
@@ -618,15 +617,16 @@ class AudioAnalyzer(BaseAnalyzer):
     def __init__(self):
         super().__init__()
         self.logger = logging.getLogger('AudioAnalyzer')
-        # 增大队列容量
         self.audio_queue = Queue(maxsize=50)
         self.last_audio = None
         self.sample_rate = InitialConfig.AUDIO_SAMPLE_RATE
         self.chunk_size = InitialConfig.AUDIO_CHUNK_SIZE
         self.threshold = InitialConfig.AUDIO_CHANGE_THRESHOLD
+        self.min_samples = int(InitialConfig.MIN_DURATION * self.sample_rate)
         self.microphone = Microphone()
         self.current_device = None  # 当前设备属性
         self._audio_thread = None  # 音频线程属性
+        self._max_retries = 3
 
     def start(self, device_index=None):
         """启动音频分析器，并可接收设备索引参数"""
@@ -636,7 +636,7 @@ class AudioAnalyzer(BaseAnalyzer):
         try:
             self.logger.info("Starting audio analyzer thread...")
             # 如果传入设备索引，则使用传入值
-            if device_index is not None:
+            if (device_index is not None):
                 self.current_device = device_index
             elif self.current_device is None:
                 available_devices = self.microphone.list_devices()
@@ -701,22 +701,19 @@ class AudioAnalyzer(BaseAnalyzer):
         is_silent = True
         last_active_time = time.time()
         silence_timeout = 3.0
-        max_segment_duration = 10
-        max_samples = int(max_segment_duration * self.sample_rate)
         retry_count = 0
-        max_retries = 3
 
         while self.is_running:
             try:
                 success, raw_data = self.microphone.read()
                 if not success or raw_data is None:
                     retry_count += 1
-                    if retry_count >= max_retries:
+                    if retry_count >= self._max_retries:
                         self.error_state = {
                             'code': 'AUDIO_READ_FAILED',
                             'message': '无法读取音频数据,请检查设备是否正常工作'
                         }
-                        self.logger.error(f"[generate_audio] 连续{max_retries}次无法读取音频数据")
+                        self.logger.error(f"[generate_audio] 连续{self._max_retries}次无法读取音频数据")
                         break
                     time.sleep(1)
                     continue
@@ -738,16 +735,16 @@ class AudioAnalyzer(BaseAnalyzer):
                 if amplitude > InitialConfig.AUDIO_CHANGE_THRESHOLD:
                     active_segment.append(audio_data)
                     total_samples = sum(seg.shape[0] for seg in active_segment)
-                    
+
                     # 当累计的样本数达到阈值时，强制保存音频文件
-                    if total_samples >= max_samples:
+                    if total_samples >= self.min_samples:
                         complete_segment = np.concatenate(active_segment, axis=0)
                         save_result = self._save_audio_file(complete_segment)
                         if save_result:
-                            self.logger.info(f"[generate_audio] 队列满，已保存音频文件: {save_result['filepath']}")
+                            self.logger.info(f"[generate_audio] 保存了音频文件: {save_result['filepath']}")
                         else:
                             self.logger.error("[generate_audio] 保存音频文件失败")
-                        active_segment = []  # 清空，开始新的队列
+                        active_segment = []  # 清空，开始新的采样
                     is_silent = False
                     last_active_time = time.time()
                 else:
@@ -757,7 +754,8 @@ class AudioAnalyzer(BaseAnalyzer):
                             complete_segment = np.concatenate(active_segment, axis=0)
                             save_result = self._save_audio_file(complete_segment)
                             if save_result:
-                                self.logger.info(f"[generate_audio] 检测到静默超时，已保存音频文件: {save_result['filepath']}")
+                                self.logger.info(
+                                    f"[generate_audio] 检测到静默超时，已保存音频文件: {save_result['filepath']}")
                             else:
                                 self.logger.error("[generate_audio] 保存音频文件失败")
                             active_segment = []
@@ -785,13 +783,13 @@ class AudioAnalyzer(BaseAnalyzer):
             self._audio_thread.join(timeout=1.0)
         self.microphone.release()
         super().stop()
-            
+
     def _analyze_loop(self):
         """
         音频数据分析循环
         循环检测分析是否开启及队列中是否有音频数据待处理
         每次从队列获取数据，保存音频文件，并启动异步 LLM 分析
-        
+
         注意：当分析关闭时将暂停等待
         """
         while self.is_running:
@@ -799,48 +797,21 @@ class AudioAnalyzer(BaseAnalyzer):
                 if not self.analysis_enabled:
                     time.sleep(0.05)
                     continue
-                    
+
                 if not self.audio_queue.empty():
                     audio_data = self.audio_queue.get()
-                    
+
                     # 保存音频文件
                     save_result = self._save_audio_file(audio_data)
                     if save_result:
                         self.logger.info(f"Successfully saved audio file: {save_result['filepath']}")
-                    
+
                     # 异步分析
                     Thread(target=self._llm_analyze, args=(audio_data,)).start()
-                    
+
             except Exception as e:
                 self.logger.error(f"Error in audio analysis: {str(e)}")
             time.sleep(0.1)
-            
-    # def _detect_audio_change(self, audio_data):
-    #     """Detect audio changes using MFCC features"""
-    #     if self.last_audio is None or not isinstance(audio_data, np.ndarray):
-    #         return False
-            
-    #     try:
-    #         # 确保音频数据是浮点型
-    #         last_audio = self.last_audio.astype(np.float32).flatten()
-    #         current_audio = audio_data.astype(np.float32).flatten()
-            
-    #         # 使用完整的导入路径计算音频特征
-    #         mfcc1 = librosa_feature.mfcc(y=last_audio, sr=self.sample_rate)
-    #         mfcc2 = librosa_feature.mfcc(y=current_audio, sr=self.sample_rate)
-            
-    #         # Calculate similarity
-    #         similarity = np.corrcoef(mfcc1.flatten(), mfcc2.flatten())[0, 1]
-            
-    #         # Add detailed logging
-    #         if similarity < self.threshold:
-    #             self.logger.info(f"Audio change detected - Similarity: {similarity:.3f} (Threshold: {self.threshold})")
-            
-    #         return similarity < self.threshold
-            
-    #     except Exception as e:
-    #         self.logger.error(f"Error in audio change detection: {str(e)}")
-    #         return False
 
     def process_stream_audio(self, audio_data):
         """处理流式音频数据"""
@@ -848,10 +819,38 @@ class AudioAnalyzer(BaseAnalyzer):
             if self.analysis_enabled:
                 # 直接调用 LLM 分析
                 self._llm_analyze(audio_data)
-                
+
         except Exception as e:
             self.logger.error(f"Error processing stream audio: {str(e)}")
-            
+
+    # def _detect_audio_change(self, audio_data):
+    #     """Detect audio changes using MFCC features"""
+    #     if self.last_audio is None or not isinstance(audio_data, np.ndarray):
+    #         return False
+
+    #     try:
+    #         # 确保音频数据是浮点型
+    #         last_audio = self.last_audio.astype(np.float32).flatten()
+    #         current_audio = audio_data.astype(np.float32).flatten()
+
+    #         # 使用完整的导入路径计算音频特征
+    #         mfcc1 = librosa_feature.mfcc(y=last_audio, sr=self.sample_rate)
+    #         mfcc2 = librosa_feature.mfcc(y=current_audio, sr=self.sample_rate)
+
+    #         # Calculate similarity
+    #         similarity = np.corrcoef(mfcc1.flatten(), mfcc2.flatten())[0, 1]
+
+    #         # Add detailed logging
+    #         if similarity < self.threshold:
+    #             self.logger.info(f"Audio change detected - Similarity: {similarity:.3f} (Threshold: {self.threshold})")
+
+    #         return similarity < self.threshold
+
+    #     except Exception as e:
+    #         self.logger.error(f"Error in audio change detection: {str(e)}")
+    #         return False
+
+
     # def integrate_stream_audio_processing(self, stream_camera):
     #     """集成流式摄像头的音频处理"""
     #     try:

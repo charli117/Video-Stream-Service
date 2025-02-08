@@ -18,7 +18,6 @@ class Microphone:
         self.audio = None
         self.current_device = 0
         self.sample_rate = InitialConfig.AUDIO_SAMPLE_RATE
-        # 初始化时先不设置channels
         self._channels = None
         self.chunk_size = InitialConfig.AUDIO_CHUNK_SIZE
         self.is_initialized = False
@@ -57,17 +56,6 @@ class Microphone:
     def get_device_name(cls, index):
         """公共方法：获取设备名称"""
         return cls._device_names.get(str(index), f'Audio Device {index}')
-
-    @staticmethod
-    def _is_valid_device(index):
-        try:
-            devices = sd.query_devices()
-            if 0 <= index < len(devices):
-                device = devices[index]
-                return device['max_input_channels'] > 0
-            return False
-        except:
-            return False
 
     @classmethod
     def update_device_names(cls, device_names):
@@ -157,28 +145,6 @@ class Microphone:
             self.logger.error(f"Error initializing audio device: {str(e)}")
             self.release()
             raise
-
-    def _stream_audio_processing(self):
-        """流式音频处理线程"""
-        try:
-            audio_stream = self.stream_audio_container.streams.audio[0]
-            for frame in self.stream_audio_container.decode(audio_stream):
-                if not self.is_initialized:
-                    break
-                try:
-                    audio_data = frame.to_ndarray()
-                    if audio_data.dtype != np.float32:
-                        audio_data = audio_data.astype(np.float32)
-                    if audio_data.ndim == 1:
-                        audio_data = audio_data.reshape(-1, 1)
-                    if audio_data.max() > 1.0:
-                        audio_data = audio_data / 32768.0
-                    if self.analysis_enabled and not self.audio_queue.full():
-                        self.audio_queue.put_nowait(audio_data)
-                except Exception as e:
-                    self.logger.error(f"Error processing audio frame: {str(e)}")
-        except Exception as e:
-            self.logger.error(f"Stream audio processing error: {str(e)}")
             
     def read(self, frames=None, chunk_size=None):
         """从队列中读取音频数据"""
@@ -261,3 +227,36 @@ class Microphone:
             self.is_initialized = False
         except Exception as e:
             self.logger.error(f"Error releasing audio device: {str(e)}")
+
+    def _stream_audio_processing(self):
+        """流式音频处理线程"""
+        try:
+            audio_stream = self.stream_audio_container.streams.audio[0]
+            for frame in self.stream_audio_container.decode(audio_stream):
+                if not self.is_initialized:
+                    break
+                try:
+                    audio_data = frame.to_ndarray()
+                    if audio_data.dtype != np.float32:
+                        audio_data = audio_data.astype(np.float32)
+                    if audio_data.ndim == 1:
+                        audio_data = audio_data.reshape(-1, 1)
+                    if audio_data.max() > 1.0:
+                        audio_data = audio_data / 32768.0
+                    if self.analysis_enabled and not self.audio_queue.full():
+                        self.audio_queue.put_nowait(audio_data)
+                except Exception as e:
+                    self.logger.error(f"Error processing audio frame: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"Stream audio processing error: {str(e)}")
+
+    @staticmethod
+    def _is_valid_device(index):
+        try:
+            devices = sd.query_devices()
+            if 0 <= index < len(devices):
+                device = devices[index]
+                return device['max_input_channels'] > 0
+            return False
+        except:
+            return False

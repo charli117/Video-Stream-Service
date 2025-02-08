@@ -14,7 +14,7 @@ class InitialConfig:
     STREAM_URL_MIN_INTERVAL = 10  # 最小请求间隔(秒)
 
     # 分析配置,支持 audio、video 两种选择
-    ANALYZER_TYPE = ['audio']
+    ANALYZER_TYPE = ['audio', 'video']
 
     # 视频分析配置
     MAX_QUEUE_SIZE = 32
@@ -30,6 +30,7 @@ class InitialConfig:
     AUDIO_CHUNK_SIZE = 2048   # 降低块大小
     AUDIO_CHANGE_THRESHOLD = 0.01  # 降低阈值使检测更敏感
     MAX_SAVED_FILES = 1000
+    MIN_DURATION = 1  # 最小持续时间
     
     # 日志配置
     LOG_PATH = 'logs/video_analyzer.log'
