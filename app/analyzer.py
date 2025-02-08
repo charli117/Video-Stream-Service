@@ -620,7 +620,7 @@ class AudioAnalyzer(BaseAnalyzer):
         self.microphone = Microphone()
         self.current_device = None  # 当前设备属性
         self._audio_thread = None  # 音频线程属性
-        self._max_retries = 200
+        self._max_retries = 20
         # 用于缓存收到的音频数据
         self.active_segment = []
         self.accumulated_samples = 0
@@ -747,6 +747,7 @@ class AudioAnalyzer(BaseAnalyzer):
                 # 现有的音频分析处理逻辑：
                 amplitude = np.abs(audio_data).mean()
                 if amplitude > self.threshold and self.analysis_enabled:
+                    self.logger.info(f"符合条件的音频流检测: amplitude = {amplitude}")
                     self.active_segment.append(audio_data)
                     self.accumulated_samples += audio_data.shape[0]
 
