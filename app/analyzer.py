@@ -49,7 +49,13 @@ class BaseAnalyzer:
             raise
 
     def stop(self):
-        """停止分析器"""
+        """
+        停止分析器
+        1. 检查是否正在运行
+        2. 将运行标志置为 False
+        3. 等待所有线程结束并清理内部队列
+        4. 记录停止日志
+        """
         if not self.is_running:
             return
             
@@ -62,16 +68,18 @@ class BaseAnalyzer:
     def cleanup_old_files(self, extension, max_files=None):
         """
         清理旧文件
+        根据文件扩展名检查输出目录中保存的文件数量，
+        如果超过最大保留数量则按照文件修改时间排序删除最旧的文件。
+        
         Args:
-            extension: 文件扩展名，如 '.jpg' 或 '.wav'
-            max_files: 最大保留文件数，默认使用配置中的值
+            extension (str): 文件扩展名，如 '.jpg' 或 '.wav'
+            max_files (int|None): 最大允许保留文件数，默认为配置中的值
         """
         try:
-            # 根据文件类型确定最大保留数量
             if max_files is None:
                 max_files = (InitialConfig.MAX_SAVED_IMAGES 
-                           if extension == '.jpg' 
-                           else InitialConfig.MAX_SAVED_FILES)
+                             if extension == '.jpg' 
+                             else InitialConfig.MAX_SAVED_FILES)
 
             files = [f for f in os.listdir(self.output_dir) if f.endswith(extension)]
             if len(files) > max_files:
@@ -83,7 +91,18 @@ class BaseAnalyzer:
             self.logger.error(f"Error cleaning up old files: {str(e)}")
 
     def toggle_analysis(self, enabled):
-        """切换分析状态"""
+        """
+        切换分析状态
+        1. 记录当前状态和目标状态
+        2. 若状态未改变则直接返回
+        3. 改变状态、清理队列（当关闭分析时）及记录日志
+        
+        Args:
+            enabled (bool): 目标状态，True 表示启动分析，False 表示关闭分析
+        
+        Returns:
+            bool: 状态切换是否成功
+        """
         with self._status_lock:
             try:
                 self.logger.info(f"Toggling analysis to: {enabled}")  # 添加日志
@@ -116,11 +135,13 @@ class BaseAnalyzer:
                 
             except Exception as e:
                 self.logger.error(f"Error toggling analysis: {str(e)}")
-                self.analysis_enabled = False  # 发生错误时重置状态
                 return False
 
     def _clear_queues(self):
-        """清空所有队列"""
+        """
+        清空所有处理队列
+        包括 frame_queue、change_queue 和 processed_frames 队列
+        """
         for queue in [self.frame_queue, self.change_queue, self.processed_frames]:
             while not queue.empty():
                 try:
@@ -166,7 +187,14 @@ class BaseAnalyzer:
             return None
 
     def _save_audio_file(self, audio_data):
-        """保存音频文件"""
+        """
+        保存音频文件
+        Args:
+            audio_data: 音频数据信息
+        
+        Returns:
+            dict: 包含保存文件信息的数据字典
+        """
         try:
             # 确保保存目录存在
             os.makedirs(self.output_dir, exist_ok=True)
@@ -528,7 +556,19 @@ class VideoAnalyzer(BaseAnalyzer):
             time.sleep(0.01)
 
     def _preprocess_frame(self, frame):
-        """预处理视频帧，增强细节但保持自然效果"""
+        """
+        预处理视频帧，增强细节同时保持自然效果
+        1. 轻微高斯模糊去噪
+        2. 转换至LAB色彩空间，并只对光照通道应用CLAHE增强
+        3. 合并通道并转换回BGR色彩空间
+        4. 调整亮度和对比度
+        
+        Args:
+            frame: 输入的视频帧数据
+        
+        Returns:
+            处理后的帧数据
+        """
         try:
             # 轻微的高斯模糊去噪，kernel size减小为(3,3)以保留更多细节
             denoised = cv2.GaussianBlur(frame, (3, 3), 0)
@@ -731,7 +771,12 @@ class AudioAnalyzer(BaseAnalyzer):
                 time.sleep(0.1)
 
     def stop(self):
-        """停止音频分析器"""
+        """
+        停止音频分析器
+        1. 检查是否正在运行
+        2. 设置关闭标志并等待音频线程结束
+        3. 释放音频设备资源，并调用父类停止方法
+        """
         if not self.is_running:
             return
 
@@ -742,6 +787,13 @@ class AudioAnalyzer(BaseAnalyzer):
         super().stop()
             
     def _analyze_loop(self):
+        """
+        音频数据分析循环
+        循环检测分析是否开启及队列中是否有音频数据待处理
+        每次从队列获取数据，保存音频文件，并启动异步 LLM 分析
+        
+        注意：当分析关闭时将暂停等待
+        """
         while self.is_running:
             try:
                 if not self.analysis_enabled:
