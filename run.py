@@ -15,9 +15,9 @@ if __name__ == '__main__':
     
     # 增加线程数
     from concurrent.futures import ThreadPoolExecutor
-    executor = ThreadPoolExecutor(max_workers=5)
+    executor = ThreadPoolExecutor(max_workers=10)
     
-    # 关闭debug模式
+    # 优化 socketio 配置
     socketio.run(app, 
         host='0.0.0.0',
         port=5008,

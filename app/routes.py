@@ -33,37 +33,39 @@ def video_feed():
 @main_bp.route('/api/devices')
 def get_devices():
     try:
-        # 先检查设备初始化状态
-        init_status = current_app.config['DEVICE_INIT_STATUS']
-        if init_status['error']:
-            return jsonify({
-                'error': init_status['error'],
-                'devices_ready': False
-            })
-            
-        cameras = []
-        audio_devices = []
+        # 获取设备初始化状态
+        init_status = current_app.config.get('DEVICE_INIT_STATUS', {})
         
-        # 只在设备就绪时获取列表
-        if init_status['camera']:
-            cameras = Camera.list_cameras()
-        if init_status['audio']:
-            audio_devices = Microphone.list_devices()
+        # 检查摄像头和音频设备状态
+        video_ready = False
+        audio_ready = False
+        
+        if 'video' in InitialConfig.ANALYZER_TYPE:
+            camera = current_app.config.get('camera')
+            video_ready = camera and camera.is_initialized
             
+        if 'audio' in InitialConfig.ANALYZER_TYPE:
+            microphone = current_app.config.get('microphone')
+            audio_ready = microphone and microphone.is_initialized
+            
+        devices_ready = (video_ready if 'video' in InitialConfig.ANALYZER_TYPE else True) and \
+                       (audio_ready if 'audio' in InitialConfig.ANALYZER_TYPE else True)
+        
+        # 获取设备列表
+        cameras = Camera.list_cameras() if video_ready else []
+        audio_devices = Microphone.list_devices() if audio_ready else []
+        
         return jsonify({
             'cameras': cameras,
             'audioDevices': audio_devices,
-            'devices_ready': True,
-            'currentCamera': video_analyzer.video_source,
-            'currentAudioDevice': audio_analyzer.current_device
+            'devices_ready': devices_ready,
+            'currentCamera': video_analyzer.video_source if video_ready else None,
+            'currentAudioDevice': audio_analyzer.current_device if audio_ready else None,
+            'error': init_status.get('error')
         })
-        
     except Exception as e:
-        current_app.logger.error(f"Error getting devices: {e}")
-        return jsonify({
-            'error': str(e),
-            'devices_ready': False
-        }), 500
+        current_app.logger.error(f"Error getting devices: {str(e)}")
+        return jsonify({'error': str(e), 'devices_ready': False}), 500
 
 
 @main_bp.route('/api/devices/switch', methods=['POST'])

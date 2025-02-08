@@ -190,11 +190,27 @@ function updateLogsDisplay() {
 }
 
 async function loadDevices() {
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY = 2000;
     let retryCount = 0;
     
-    const retryWithDelay = async () => {
+    const statusDiv = document.getElementById('status');
+    const refreshButton = document.getElementById('refreshButton');
+    const analysisToggle = document.getElementById('analysisToggle');
+    
+    refreshButton.disabled = true;
+    analysisToggle.disabled = true;
+    
+    async function attemptLoad() {
         try {
+            if (statusDiv) {
+                statusDiv.innerHTML = `
+                    <div class="loading">
+                        <i class="fas fa-spinner fa-spin"></i> 正在加载设备 (尝试 ${retryCount + 1}/${MAX_RETRIES})...
+                    </div>
+                `;
+            }
+            
             const response = await fetch("/api/devices");
             const data = await response.json();
             
@@ -205,54 +221,37 @@ async function loadDevices() {
             if (!data.devices_ready) {
                 if (retryCount < MAX_RETRIES) {
                     retryCount++;
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    return await retryWithDelay();
+                    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+                    return attemptLoad();
                 }
                 throw new Error("设备初始化超时");
             }
             
-            // 更新设备列表UI...
-            updateDeviceList(data);
+            // 更新设备选择列表
+            updateDeviceLists(data);
+            
+            // 更新设备状态
+            await updateDeviceStatus();
+            
+            // 启动状态轮询
+            startStatusUpdates();
+            
+            return true;
             
         } catch (error) {
             showError(`设备加载失败: ${error.message}`);
-            throw error;
+            return false;
         }
-    };
+    }
     
-    return retryWithDelay();
-}
-
-async function loadDevices() {
-    // 添加超时控制
-    const timeout = 10000; // 10秒超时
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-
     try {
-        const response = await fetch("/api/devices", {
-            signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        
-        const data = await response.json();
-        if (!data.devices_ready) {
-            // 增加重试机制
-            if (retryCount < MAX_RETRIES) {
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                return await retryWithDelay();
-            }
-            throw new Error("设备初始化超时");
-        }
-
-        // 其余设备更新逻辑保持不变...
-    } catch (error) {
-        showError(`设备加载失败: ${error.message}`);
-        const analysisToggle = document.getElementById('analysisToggle');
-        if (analysisToggle) {
+        const success = await attemptLoad();
+        if (!success) {
             analysisToggle.disabled = true;
             analysisToggle.title = "设备加载失败";
         }
+    } finally {
+        refreshButton.disabled = false;
     }
 }
 
@@ -660,12 +659,50 @@ function playAudioSegment(audioUrl) {
 let statusUpdateInterval = null;
 
 function startStatusUpdates() {
-    updateStatus();  // 立即执行一次
-    statusUpdateInterval = setInterval(() => {
-        if (!document.hidden) {  // 只在页面可见时更新
-            updateStatus();
+    if (statusUpdateInterval) {
+        clearInterval(statusUpdateInterval);
+    }
+    
+    statusUpdateInterval = setInterval(async () => {
+        try {
+            await updateStatus();
+        } catch (error) {
+            console.error("Status update failed:", error);
+            clearInterval(statusUpdateInterval);
+            showError("状态更新失败，请刷新页面");
         }
-    }, 1000);
+    }, 1000);  // 每秒更新一次
+}
+
+async function updateStatus() {
+    try {
+        const response = await fetch("/api/status");
+        const status = await response.json();
+        
+        // 设备状态检查
+        if (!status.devices_ready) {
+            showError("设备未就绪，正在重新加载...");
+            await loadDevices();
+            return;
+        }
+        
+        // 更新UI状态
+        updateStatusUI(status);
+        
+        // 更新分析按钮状态
+        updateAnalysisButton(status);
+        
+        // 更新日志显示
+        if (status.frame_changes || status.audio_changes) {
+            updateLogsDisplay();
+        }
+        
+        hideError();
+        
+    } catch (error) {
+        console.error("Error updating status:", error);
+        throw error;
+    }
 }
 
 // 监听页面可见性变化

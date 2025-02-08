@@ -86,22 +86,22 @@ class Microphone:
     def start(self, device_index=None):
         """启动音频设备"""
         try:
-            self.logger.info("Initializing audio device")
             if self.is_initialized:
-                self.release()
-                time.sleep(1)  # 增加等待时间
+                return  # 如果已经初始化，直接返回
+                
+            self.logger.info("Initializing audio device")
             
             if self.is_stream_mode:
-                # 流媒体模式下，忽略传入的 device_index，直接使用流媒体音频数据
+                # 流媒体模式下的初始化
                 stream_camera = StreamCamera()
                 stream_url = stream_camera.get_stream_url()
                 if not stream_url:
                     raise ValueError("Failed to get stream URL")
                 
-                # 使用流媒体音频容器
+                # 减少超时时间
                 self.stream_audio_container = av.open(stream_url, options={
                     'rtsp_transport': 'tcp',
-                    'stimeout': '5000000'
+                    'stimeout': '3000000'  # 减少超时时间
                 })
                 audio_stream = self.stream_audio_container.streams.audio[0]
                 self.sample_rate = audio_stream.rate

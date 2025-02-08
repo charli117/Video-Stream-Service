@@ -87,17 +87,21 @@ def create_app():
         'audio': False,
         'error': None
     }
-
+    
     try:
-        # 初始化摄像头并保存到app.config
+        # 初始化摄像头
         if 'video' in InitialConfig.ANALYZER_TYPE:
-            app.config['camera'] = Camera()  # 保存实例
-            app.config['DEVICE_INIT_STATUS']['camera'] = True
+            camera = Camera()
+            app.config['camera'] = camera
+            camera.start(InitialConfig.DEFAULT_CAMERA_INDEX)
+            app.config['DEVICE_INIT_STATUS']['camera'] = camera.is_initialized
             
-        # 初始化音频并保存到app.config
+        # 初始化音频
         if 'audio' in InitialConfig.ANALYZER_TYPE:
-            app.config['microphone'] = Microphone()  # 保存实例
-            app.config['DEVICE_INIT_STATUS']['audio'] = True
+            mic = Microphone()
+            app.config['microphone'] = mic
+            mic.start()
+            app.config['DEVICE_INIT_STATUS']['audio'] = mic.is_initialized
             
     except Exception as e:
         app.config['DEVICE_INIT_STATUS']['error'] = str(e)
