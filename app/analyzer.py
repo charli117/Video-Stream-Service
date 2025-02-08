@@ -26,12 +26,12 @@ class BaseAnalyzer:
         self.change_queue = Queue(maxsize=5)
         self.processed_frames = Queue(maxsize=2)
         self.is_running = False
-        self._status_lock = threading.Lock()
-        self._lock = threading.Lock()
-        self._threads = []
         self.output_dir = InitialConfig.OUTPUT_DIR
         self.max_saved_files = InitialConfig.MAX_SAVED_FILES
         self.analysis_enabled = False
+        self._status_lock = threading.Lock()
+        self._lock = threading.Lock()
+        self._threads = []
 
     def start(self):
         """启动分析器"""
@@ -328,7 +328,7 @@ class BaseAnalyzer:
         try:
             result = None
             # 根据数据类型判断处理方式
-            if isinstance(data, np.ndarray):
+            if isinstance(data, np.ndarray) and self.analysis_enabled:
                 if len(data.shape) == 3:  # 视频帧数据
                     extension = '.jpg'
                     self.cleanup_old_files(extension)
@@ -373,6 +373,7 @@ class VideoAnalyzer(BaseAnalyzer):
         self._last_frame_time = time.time()
         self.max_display_height = InitialConfig.MAX_DISPLAY_HEIGHT
         self.scale_percent = InitialConfig.SCALE_PERCENT
+        self.change_frame_threshole = InitialConfig.CHANGE_FRAME_THRESHOLD
 
     def start(self, video_source=0):
         """启动视频分析器"""
@@ -413,7 +414,6 @@ class VideoAnalyzer(BaseAnalyzer):
                 thread.join(timeout=1.0)
 
             self._clear_queues()
-            self.logger.info("VideoAnalyzer stopped successfully")
 
         except Exception as e:
             self.logger.error(f"Error stopping VideoAnalyzer: {str(e)}")
@@ -536,7 +536,7 @@ class VideoAnalyzer(BaseAnalyzer):
                                 self.logger.info("Significant frame change detected")
                                 change_frames.append(processed_frame.copy())
 
-                                if len(change_frames) >= InitialConfig.CHANGE_FRAME_THRESHOLD:
+                                if len(change_frames) >= self.change_frame_threshole:
                                     concat_frame = process_change_frames(change_frames)
                                     if concat_frame is not None:
                                         if self.change_queue.full():
@@ -813,15 +813,15 @@ class AudioAnalyzer(BaseAnalyzer):
                 self.logger.error(f"Error in audio analysis: {str(e)}")
             time.sleep(0.1)
 
-    def process_stream_audio(self, audio_data):
-        """处理流式音频数据"""
-        try:
-            if self.analysis_enabled:
-                # 直接调用 LLM 分析
-                self._llm_analyze(audio_data)
-
-        except Exception as e:
-            self.logger.error(f"Error processing stream audio: {str(e)}")
+    # def process_stream_audio(self, audio_data):
+    #     """处理流式音频数据"""
+    #     try:
+    #         if self.analysis_enabled:
+    #             # 直接调用 LLM 分析
+    #             self._llm_analyze(audio_data)
+    #
+    #     except Exception as e:
+    #         self.logger.error(f"Error processing stream audio: {str(e)}")
 
     # def _detect_audio_change(self, audio_data):
     #     """Detect audio changes using MFCC features"""
