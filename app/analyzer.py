@@ -730,6 +730,14 @@ class AudioAnalyzer(BaseAnalyzer):
                 if amplitude > self.threshold:
                     self.active_segment.append(audio_data)
                     self.accumulated_samples += audio_data.shape[0]
+
+                # 确保 socketio 已初始化
+                if hasattr(self, 'socketio'):
+                    audio_level = np.abs(raw_data).mean()
+                    self.socketio.emit('audio_data', {
+                        'data': raw_data.tolist(),
+                        'level': float(audio_level)
+                    })
             except Exception as e:
                 self.logger.error(f"Error generating audio: {str(e)}")
                 time.sleep(0.1)

@@ -14,7 +14,7 @@ class InitialConfig:
     STREAM_URL_MIN_INTERVAL = 10  # 最小请求间隔(秒)
 
     # 分析配置,支持 audio、video 两种选择
-    ANALYZER_TYPE = ['audio', 'video']
+    ANALYZER_TYPE = ['video']
 
     # 视频分析配置
     MAX_QUEUE_SIZE = 32

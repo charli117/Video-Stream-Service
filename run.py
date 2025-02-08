@@ -1,15 +1,26 @@
 import os
 import logging
 from app import create_app
+from app.socket import socketio
 
 if __name__ == '__main__':
     # 确保必要的目录存在
     os.makedirs('logs', exist_ok=True)
-    os.makedirs('templates', exist_ok=True)
-    os.makedirs('static', exist_ok=True)
     os.makedirs('static/output', exist_ok=True)
 
     app = create_app()
+    
+    # 降低日志级别
     logging.getLogger('werkzeug').setLevel(logging.WARNING)
-    # 始终启动 Web 服务
-    app.run(host='0.0.0.0', port=5008, debug=False)
+    
+    # 增加线程数
+    from concurrent.futures import ThreadPoolExecutor
+    executor = ThreadPoolExecutor(max_workers=5)
+    
+    # 关闭debug模式
+    socketio.run(app, 
+        host='0.0.0.0',
+        port=5008,
+        debug=False,
+        use_reloader=False,
+        allow_unsafe_werkzeug=True)

@@ -1,12 +1,12 @@
 import logging
 import os
-from flask import Blueprint, render_template, Response, jsonify, request
+import glob
+from flask import Blueprint, render_template, Response, jsonify, request, current_app
+
 from app import video_analyzer, audio_analyzer
 from app.camera import Camera
 from app.microphone import Microphone
 from config import InitialConfig
-import glob
-from datetime import datetime
 
 # 创建蓝图
 main_bp = Blueprint('main', __name__)
@@ -32,31 +32,38 @@ def video_feed():
 
 @main_bp.route('/api/devices')
 def get_devices():
-    """获取设备列表"""
     try:
-        cameras = Camera.list_cameras()
-        
-        # 只在本地模式下获取音频设备
+        # 先检查设备初始化状态
+        init_status = current_app.config['DEVICE_INIT_STATUS']
+        if init_status['error']:
+            return jsonify({
+                'error': init_status['error'],
+                'devices_ready': False
+            })
+            
+        cameras = []
         audio_devices = []
-        if InitialConfig.CAMERA_TYPE == 'local':
-            audio_devices = Microphone.list_devices()
         
-        # 根据 CAMERA_TYPE 返回不同的控件配置
-        if InitialConfig.CAMERA_TYPE == 'local':
-            controls = ['cameraSelect', 'audioSelect', 'Refresh Devices']
-        else:
-            controls = ['Refresh Devices', 'Open Analysis']
+        # 只在设备就绪时获取列表
+        if init_status['camera']:
+            cameras = Camera.list_cameras()
+        if init_status['audio']:
+            audio_devices = Microphone.list_devices()
             
         return jsonify({
             'cameras': cameras,
             'audioDevices': audio_devices,
+            'devices_ready': True,
             'currentCamera': video_analyzer.video_source,
-            'currentAudioDevice': audio_analyzer.current_device if InitialConfig.CAMERA_TYPE == 'local' else None,
-            'controls': controls
+            'currentAudioDevice': audio_analyzer.current_device
         })
+        
     except Exception as e:
-        logger.error(f"Error getting devices: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.error(f"Error getting devices: {e}")
+        return jsonify({
+            'error': str(e),
+            'devices_ready': False
+        }), 500
 
 
 @main_bp.route('/api/devices/switch', methods=['POST'])
@@ -284,7 +291,7 @@ def cleanup():
 def get_history_files():
     try:
         # 获取输出目录路径
-        output_dir = app.config['OUTPUT_DIR']
+        output_dir = InitialConfig.OUTPUT_DIR
         
         # 获取图像文件
         image_files = glob.glob(os.path.join(output_dir, 'frame_*.jpg'))

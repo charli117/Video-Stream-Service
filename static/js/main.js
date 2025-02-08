@@ -47,6 +47,72 @@ function showImageViewer(imageUrl) {
     };
 }
 
+// 添加波形图相关变量
+let waveformContext = null;
+let audioData = new Float32Array(1024);
+const THRESHOLD = -20; // dB
+
+// 初始化波形图
+function initWaveform() {
+    const canvas = document.getElementById('waveformCanvas');
+    waveformContext = canvas.getContext('2d');
+    
+    // 设置画布实际大小
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+}
+
+// 更新波形图
+function updateWaveform(newAudioData) {
+    if (!waveformContext || !newAudioData) return;
+    
+    const canvas = waveformContext.canvas;
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // 清除画布
+    waveformContext.clearRect(0, 0, width, height);
+    
+    // 绘制阈值线
+    const thresholdY = height/2 - (height/2 * (THRESHOLD/100));
+    waveformContext.strokeStyle = '#ff4444';
+    waveformContext.setLineDash([5, 5]);
+    waveformContext.beginPath();
+    waveformContext.moveTo(0, thresholdY);
+    waveformContext.lineTo(width, thresholdY);
+    waveformContext.stroke();
+    waveformContext.setLineDash([]);
+    
+    // 绘制波形
+    waveformContext.strokeStyle = '#4CAF50';
+    waveformContext.beginPath();
+    const sliceWidth = width / newAudioData.length;
+    
+    for(let i = 0; i < newAudioData.length; i++) {
+        const x = i * sliceWidth;
+        const v = newAudioData[i];
+        const y = (height/2) * (1 + v);
+        
+        if(i === 0) {
+            waveformContext.moveTo(x, y);
+        } else {
+            waveformContext.lineTo(x, y);
+        }
+        
+        // 标记超过阈值的区域
+        if(Math.abs(v) > Math.abs(THRESHOLD/100)) {
+            waveformContext.fillStyle = 'rgba(76, 175, 80, 0.2)';
+            waveformContext.fillRect(x, 0, sliceWidth, height);
+        }
+    }
+    
+    waveformContext.stroke();
+    
+    // 更新音频电平显示
+    const level = 20 * Math.log10(Math.max(...newAudioData.map(Math.abs)));
+    document.getElementById('audioLevel').textContent = `Level: ${level.toFixed(1)} dB`;
+}
+
 // 添加初始化历史记录函数
 async function initializeHistory() {
     try {
@@ -120,6 +186,73 @@ function updateLogsDisplay() {
             </div>
         `;
         audioLogDiv.innerHTML = audioLogHtml;
+    }
+}
+
+async function loadDevices() {
+    const MAX_RETRIES = 3;
+    let retryCount = 0;
+    
+    const retryWithDelay = async () => {
+        try {
+            const response = await fetch("/api/devices");
+            const data = await response.json();
+            
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            if (!data.devices_ready) {
+                if (retryCount < MAX_RETRIES) {
+                    retryCount++;
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    return await retryWithDelay();
+                }
+                throw new Error("设备初始化超时");
+            }
+            
+            // 更新设备列表UI...
+            updateDeviceList(data);
+            
+        } catch (error) {
+            showError(`设备加载失败: ${error.message}`);
+            throw error;
+        }
+    };
+    
+    return retryWithDelay();
+}
+
+async function loadDevices() {
+    // 添加超时控制
+    const timeout = 10000; // 10秒超时
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+        const response = await fetch("/api/devices", {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        const data = await response.json();
+        if (!data.devices_ready) {
+            // 增加重试机制
+            if (retryCount < MAX_RETRIES) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                return await retryWithDelay();
+            }
+            throw new Error("设备初始化超时");
+        }
+
+        // 其余设备更新逻辑保持不变...
+    } catch (error) {
+        showError(`设备加载失败: ${error.message}`);
+        const analysisToggle = document.getElementById('analysisToggle');
+        if (analysisToggle) {
+            analysisToggle.disabled = true;
+            analysisToggle.title = "设备加载失败";
+        }
     }
 }
 
@@ -458,6 +591,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadDevices();
     startStatusUpdates();
     updateButtonColor();
+    initWaveform(); // 初始化波形图
 });
 
 async function switchCamera() {
@@ -527,12 +661,28 @@ let statusUpdateInterval = null;
 
 function startStatusUpdates() {
     updateStatus();  // 立即执行一次
-    statusUpdateInterval = setInterval(updateStatus, 1000);  // 每秒更新一次
+    statusUpdateInterval = setInterval(() => {
+        if (!document.hidden) {  // 只在页面可见时更新
+            updateStatus();
+        }
+    }, 1000);
 }
 
-window.addEventListener('beforeunload', async function(e) {
+// 监听页面可见性变化
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+        updateStatus();  // 页面变为可见时立即更新
+    }
+});
+
+window.addEventListener('beforeunload', async (e) => {
     try {
-        // 在页面刷新前尝试清理资源
+        // 停止状态更新
+        if (statusUpdateInterval) {
+            clearInterval(statusUpdateInterval);
+        }
+        
+        // 清理服务器资源
         await fetch('/api/cleanup', {
             method: 'POST',
             headers: {
@@ -618,6 +768,13 @@ async function updateStatus() {
         const response = await fetch("/api/status");
         const status = await response.json();
         const analysisToggle = document.getElementById('analysisToggle');
+
+        // 添加设备状态检查
+        if (!status.devices_ready) {
+            // 触发重新加载设备
+            await loadDevices();
+            return;
+        }
         
         if (analysisToggle) {
             // 根据设备状态更新分析按钮，但不影响日志显示
@@ -640,6 +797,13 @@ async function updateStatus() {
         
         // 更新基本状态信息
         const statusDiv = document.getElementById('status');
+        
+        // 更新UI状态
+        updateStatusUI(status);
+        
+        // 更新分析按钮状态
+        updateAnalysisButton(status);
+        
         if (!statusDiv) return;
         let statusHtml = '';
 
@@ -812,3 +976,21 @@ function playAudio(audioUrl) {
         showError('Error playing audio: ' + error.message);
     });
 }
+
+// 监听窗口大小变化，重新调整画布大小
+window.addEventListener('resize', () => {
+    if(waveformContext) {
+        const canvas = waveformContext.canvas;
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+    }
+});
+
+// 添加 Socket.IO 连接
+const socket = io();
+
+socket.on('audio_data', (data) => {
+    // 更新波形图
+    audioData = new Float32Array(data.data);
+    updateWaveform(audioData);
+});
