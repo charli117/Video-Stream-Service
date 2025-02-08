@@ -5,9 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="c7800c4b-088e-4c62-8313-176bf30b8a3d" name="更改" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/camera.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/camera.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/analyzer.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/analyzer.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -539,7 +537,15 @@
       <option name="project" value="LOCAL" />
       <updated>1739018346702</updated>
     </task>
-    <option name="localTasksCounter" value="47" />
+    <task id="LOCAL-00047" summary="feat(camera.py, config.py, socket.py): 更新摄像头配置，优化音频处理逻辑，添加SocketIO状态更新功能">
+      <option name="closed" value="true" />
+      <created>1739019176603</created>
+      <option name="number" value="00047" />
+      <option name="presentableId" value="LOCAL-00047" />
+      <option name="project" value="LOCAL" />
+      <updated>1739019176603</updated>
+    </task>
+    <option name="localTasksCounter" value="48" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -569,7 +575,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="refactor: 移除冗余的config导入" />
     <MESSAGE value="refactor: 重构配置类并优化摄像头初始化" />
     <MESSAGE value="feat: 添加分析开关接口及前端控制" />
     <MESSAGE value="feat: 添加分析开关接口及前端控制，调整样式宽度" />
@@ -594,7 +599,8 @@
     <MESSAGE value="refactor(analyzer.py): 移除音频数据转换日志，简化日志记录" />
     <MESSAGE value="refactor(microphone.py, camera.py): 优化音频处理和重连机制，改进资源清理逻辑" />
     <MESSAGE value="feat(main.js): 增强音频播放功能及界面优化" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat(main.js): 增强音频播放功能及界面优化" />
+    <MESSAGE value="feat(camera.py, config.py, socket.py): 更新摄像头配置，优化音频处理逻辑，添加SocketIO状态更新功能" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat(camera.py, config.py, socket.py): 更新摄像头配置，优化音频处理逻辑，添加SocketIO状态更新功能" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

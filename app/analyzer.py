@@ -707,7 +707,7 @@ class AudioAnalyzer(BaseAnalyzer):
                         }
                         self.logger.error(f"[generate_audio] 连续{self._max_retries}次无法读取音频数据")
                         break
-                    time.sleep(1)
+                    time.sleep(3)
                     continue
 
                 # 读取成功后重置重试计数
