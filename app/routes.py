@@ -5,6 +5,8 @@ from app import video_analyzer, audio_analyzer
 from app.camera import Camera
 from app.microphone import Microphone
 from config import InitialConfig
+import glob
+from datetime import datetime
 
 # 创建蓝图
 main_bp = Blueprint('main', __name__)
@@ -276,3 +278,45 @@ def cleanup():
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@main_bp.route('/api/history_files')
+def get_history_files():
+    try:
+        # 获取输出目录路径
+        output_dir = app.config['OUTPUT_DIR']
+        
+        # 获取图像文件
+        image_files = glob.glob(os.path.join(output_dir, 'frame_*.jpg'))
+        frame_changes = []
+        for file in image_files:
+            # 从文件名中提取时间戳
+            timestamp = float(os.path.basename(file).replace('frame_', '').replace('.jpg', ''))
+            frame_changes.append({
+                'time': timestamp,
+                'image_url': f'/output/frame_{timestamp}.jpg'
+            })
+        
+        # 获取音频文件
+        audio_files = glob.glob(os.path.join(output_dir, 'audio_*.wav'))
+        audio_changes = []
+        for file in audio_files:
+            # 从文件名中提取时间戳
+            timestamp = float(os.path.basename(file).replace('audio_', '').replace('.wav', ''))
+            audio_changes.append({
+                'time': timestamp,
+                'audio_url': f'/output/audio_{timestamp}.wav'
+            })
+        
+        # 按时间戳排序
+        frame_changes.sort(key=lambda x: x['time'], reverse=True)
+        audio_changes.sort(key=lambda x: x['time'], reverse=True)
+        
+        # 只返回最近的50条记录
+        return jsonify({
+            'frame_changes': frame_changes[:50],
+            'audio_changes': audio_changes[:50]
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

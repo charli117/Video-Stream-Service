@@ -47,6 +47,82 @@ function showImageViewer(imageUrl) {
     };
 }
 
+// 添加初始化历史记录函数
+async function initializeHistory() {
+    try {
+        const response = await fetch('/api/history_files');
+        const data = await response.json();
+        
+        if (data.frame_changes) {
+            frameChangesHistory = data.frame_changes;
+        }
+        
+        if (data.audio_changes) {
+            audioChangesHistory = data.audio_changes;
+        }
+        
+        // 立即更新日志显示
+        updateLogsDisplay();
+    } catch (error) {
+        console.error('Error initializing history:', error);
+    }
+}
+
+// 添加统一的日志更新函数
+function updateLogsDisplay() {
+    // 更新 Video Changes Log
+    const videoLogDiv = document.getElementById('video-changes-log');
+    if (videoLogDiv) {
+        const videoLogHtml = `
+            <h3>Video Changes Log</h3>
+            <div class="log-entries">
+                ${frameChangesHistory.length > 0 ?
+                    frameChangesHistory.map(change => {
+                        const date = new Date(change.time * 1000);
+                        const timeString = date.toLocaleString('zh-CN');
+                        return `
+                            <div class="log-entry">
+                                <a href="javascript:void(0)" onclick="showImageViewer('${change.image_url}')" class="change-time">
+                                    <i class="fas fa-camera"></i>
+                                    ${timeString}
+                                </a>
+                            </div>
+                        `;
+                    }).join('') :
+                    '<p class="no-changes">No frame changes detected</p>'
+                }
+            </div>
+        `;
+        videoLogDiv.innerHTML = videoLogHtml;
+    }
+
+    // 更新 Audio Changes Log
+    const audioLogDiv = document.getElementById('audio-changes-log');
+    if (audioLogDiv) {
+        const audioLogHtml = `
+            <h3>Audio Changes Log</h3>
+            <div class="log-entries">
+                ${audioChangesHistory.length > 0 ?
+                    audioChangesHistory.map(change => {
+                        const date = new Date(change.time * 1000);
+                        const timeString = date.toLocaleString('zh-CN');
+                        return `
+                            <div class="log-entry">
+                                <a href="javascript:void(0)" onclick="playAudioSegment('${change.audio_url}')" class="change-time">
+                                    <i class="fas fa-volume-up"></i>
+                                    ${timeString}
+                                </a>
+                            </div>
+                        `;
+                    }).join('') :
+                    '<p class="no-changes">No audio changes detected</p>'
+                }
+            </div>
+        `;
+        audioLogDiv.innerHTML = audioLogHtml;
+    }
+}
+
 async function loadDevices() {
     try {
         // 添加加载状态提示
@@ -377,7 +453,8 @@ async function switchDevices() {
 }
 
 // 替换原有的 loadCameras 函数调用
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await initializeHistory();  // 首先初始化历史记录
     loadDevices();
     startStatusUpdates();
     updateButtonColor();
@@ -612,10 +689,13 @@ async function updateStatus() {
         statusDiv.innerHTML = statusHtml;
 
         // 更新历史记录（只追加不重复，最多保存50条）
+        let historyUpdated = false;
+
         if (status.frame_changes?.length > 0) {
             status.frame_changes.forEach(change => {
                 if (!frameChangesHistory.find(h => h.time === change.time)) {
                     frameChangesHistory.unshift(change);
+                    historyUpdated = true;
                 }
             });
             frameChangesHistory = frameChangesHistory.slice(0, 50);
@@ -625,6 +705,7 @@ async function updateStatus() {
             status.audio_changes.forEach(change => {
                 if (!audioChangesHistory.find(h => h.time === change.time)) {
                     audioChangesHistory.unshift(change);
+                    historyUpdated = true;
                 }
             });
             audioChangesHistory = audioChangesHistory.slice(0, 50);
