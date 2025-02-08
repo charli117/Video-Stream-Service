@@ -619,7 +619,7 @@ class AudioAnalyzer(BaseAnalyzer):
         self.microphone = Microphone()
         self.current_device = None  # 当前设备属性
         self._audio_thread = None  # 音频线程属性
-        self._max_retries = 3
+        self._max_retries = 10
         # 用于缓存收到的音频数据
         self.active_segment = []
         self.accumulated_samples = 0
