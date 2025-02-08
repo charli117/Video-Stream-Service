@@ -49,6 +49,16 @@ function showImageViewer(imageUrl) {
 
 async function loadDevices() {
     try {
+        // 添加加载状态提示
+        const statusDiv = document.getElementById('status');
+        if (statusDiv) {
+            statusDiv.innerHTML = `
+                <div class="status-loading">
+                    <i class="fas fa-spinner fa-spin"></i> 正在加载摄像头和麦克风...
+                </div>
+            `;
+        }
+
         const refreshButton = document.getElementById('refreshButton');
         const analysisToggle = document.getElementById('analysisToggle');
         
@@ -196,10 +206,6 @@ async function loadDevices() {
             }
         }
 
-        // 完全清空 cameraSelect 和 audioSelect 内所有选项
-        // while (cameraSelect.options.length > 0) {
-        //     cameraSelect.remove(0);
-        // }
         while (audioSelect.options.length > 0) {
             audioSelect.remove(0);
         }
@@ -352,8 +358,6 @@ async function switchDevices() {
 
         currentCamera = cameraIndex;
         currentAudioDevice = audioIndex;
-
-        console.log(`Switched to camera ${cameraIndex} and audio device ${audioIndex}`);
 
         // 刷新视频源
         const videoFeed = document.getElementById('videoFeed');
@@ -539,8 +543,8 @@ async function updateStatus() {
         const analysisToggle = document.getElementById('analysisToggle');
         
         if (analysisToggle) {
-            // 根据设备状态更新按钮
-            if (!status.devices_ready) {
+            // 根据设备状态更新分析按钮，但不影响日志显示
+            if (!status.devices_ready || !status.camera_info.initialized) {
                 analysisToggle.disabled = true;
                 analysisToggle.title = "设备未就绪，请等待初始化完成";
             } else if (status.audio_error) {
@@ -549,8 +553,6 @@ async function updateStatus() {
             } else {
                 analysisToggle.disabled = false;
                 analysisToggle.title = "";
-
-                // 更新按钮状态
                 analysisToggle.setAttribute('data-enabled', status.analysis_enabled);
                 analysisToggle.innerHTML = status.analysis_enabled 
                     ? '<i class="fas fa-stop"></i> Close Analysis'
@@ -559,21 +561,17 @@ async function updateStatus() {
             }
         }
         
-        // 获取状态显示元素
+        // 更新基本状态信息
         const statusDiv = document.getElementById('status');
         if (!statusDiv) return;
-
-        // 首先清空当前状态显示
         let statusHtml = '';
 
-        // 检查是否有错误
         if (status.error) {
             statusHtml = `<p class="error">Error: ${status.error}</p>`;
             statusDiv.innerHTML = statusHtml;
             return;
         }
-
-        // 添加基本状态信息
+        
         statusHtml = `
             <p>Status: ${status.is_running ? 'Running' : 'Stopped'}</p>
             <p>Camera: ${status.current_camera_name || 'None'}</p>
@@ -588,21 +586,16 @@ async function updateStatus() {
                 analysisToggle.disabled = true;
                 analysisToggle.title = "设备未就绪";
             }
-            
-            // 添加设备未就绪提示
             statusHtml += `
                 <div class="warning">
-                    <i class="fas fa-exclamation-circle"></i>
-                    设备未就绪，请等待初始化完成
+                    <i class="fas fa-exclamation-circle"></i>设备未就绪，请等待初始化完成
                 </div>
             `;
         } else if (status.audio_error) {
-            // 有音频错误时禁用分析按钮
             if (analysisToggle) {
                 analysisToggle.disabled = true;
                 analysisToggle.title = status.audio_error.message;
             }
-            
             statusHtml += `
                 <div class="error">
                     <i class="fas fa-exclamation-triangle"></i>
@@ -610,25 +603,15 @@ async function updateStatus() {
                 </div>
             `;
         } else {
-            // 设备就绪且无错误时启用按钮
             if (analysisToggle) {
                 analysisToggle.disabled = false;
                 analysisToggle.title = "";
             }
         }
+        
+        statusDiv.innerHTML = statusHtml;
 
-        // 更新分析按钮状态
-        if (analysisToggle) {
-            const currentState = analysisToggle.textContent === 'Close Analysis';
-            if (currentState !== status.analysis_enabled) {
-                analysisToggle.innerHTML = '<i class="fas fa-sync"></i> ' + 
-                    (status.analysis_enabled ? 'Close Analysis' : 'Open Analysis');
-                updateButtonColor();
-                saveButtonState();
-            }
-        }
-
-        // 更新历史记录
+        // 更新历史记录（只追加不重复，最多保存50条）
         if (status.frame_changes?.length > 0) {
             status.frame_changes.forEach(change => {
                 if (!frameChangesHistory.find(h => h.time === change.time)) {
@@ -647,12 +630,13 @@ async function updateStatus() {
             audioChangesHistory = audioChangesHistory.slice(0, 50);
         }
 
-        // 添加视频变化日志
-        statusHtml += `
-            <div class="changes-log">
+        // 独立更新 Video Changes Log
+        const videoLogDiv = document.getElementById('video-changes-log');
+        if (videoLogDiv) {
+            const videoLogHtml = `
                 <h3>Video Changes Log</h3>
                 <div class="log-entries">
-                    ${frameChangesHistory.length > 0 ? 
+                    ${frameChangesHistory.length > 0 ?
                         frameChangesHistory.map(change => {
                             const date = new Date(change.time * 1000);
                             const timeString = date.toLocaleString('zh-CN');
@@ -668,12 +652,14 @@ async function updateStatus() {
                         '<p class="no-changes">No frame changes detected</p>'
                     }
                 </div>
-            </div>
-        `;
+            `;
+            videoLogDiv.innerHTML = videoLogHtml;
+        }
 
-        // 添加音频变化日志
-        statusHtml += `
-            <div class="changes-log">
+        // 独立更新 Audio Changes Log
+        const audioLogDiv = document.getElementById('audio-changes-log');
+        if (audioLogDiv) {
+            const audioLogHtml = `
                 <h3>Audio Changes Log</h3>
                 <div class="log-entries">
                     ${audioChangesHistory.length > 0 ?
@@ -692,16 +678,46 @@ async function updateStatus() {
                         '<p class="no-changes">No audio changes detected</p>'
                     }
                 </div>
-            </div>
-        `;
-
-        // 如果摄像头未初始化，添加警告
-        if (!status.camera_info.initialized) {
-            statusHtml += `<p class="warning">Camera not initialized</p>`;
+            `;
+            audioLogDiv.innerHTML = audioLogHtml;
         }
 
-        // 更新整个状态显示
-        statusDiv.innerHTML = statusHtml;
+        // 在 updateStatus 函数中更新日志部分的代码
+        const frameLogEntries = document.getElementById('frameLogEntries');
+        if (frameLogEntries) {
+            frameLogEntries.innerHTML = frameChangesHistory.length > 0 ?
+                frameChangesHistory.map(change => {
+                    const date = new Date(change.time * 1000);
+                    const timeString = date.toLocaleString('zh-CN');
+                    return `
+                        <div class="log-entry">
+                            <a href="javascript:void(0)" onclick="showImageViewer('${change.image_url}')" class="change-time">
+                                <i class="fas fa-camera"></i>
+                                ${timeString}
+                            </a>
+                        </div>
+                    `;
+                }).join('') :
+                '<p class="no-changes">No frame changes detected</p>';
+        }
+
+        const audioLogEntries = document.getElementById('audioLogEntries');
+        if (audioLogEntries) {
+            audioLogEntries.innerHTML = audioChangesHistory.length > 0 ?
+                audioChangesHistory.map(change => {
+                    const date = new Date(change.time * 1000);
+                    const timeString = date.toLocaleString('zh-CN');
+                    return `
+                        <div class="log-entry">
+                            <a href="javascript:void(0)" onclick="playAudioSegment('${change.audio_url}')" class="change-time">
+                                <i class="fas fa-volume-up"></i>
+                                ${timeString}
+                            </a>
+                        </div>
+                    `;
+                }).join('') :
+                '<p class="no-changes">No audio changes detected</p>';
+        }
 
     } catch (error) {
         console.error('Error updating status:', error);

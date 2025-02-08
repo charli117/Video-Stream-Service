@@ -7,6 +7,7 @@ import numpy as np
 from queue import Queue, Empty
 import threading
 import av
+from .camera import StreamCamera
 
 
 class Microphone:
@@ -92,18 +93,16 @@ class Microphone:
             
             if self.is_stream_mode:
                 # 流媒体模式下，忽略传入的 device_index，直接使用流媒体音频数据
-                from .camera import StreamCamera
                 stream_camera = StreamCamera()
                 stream_url = stream_camera.get_stream_url()
                 if not stream_url:
                     raise ValueError("Failed to get stream URL")
                 
-                # 使用流媒体音频容器，确保audio_container来自StreamCamera
+                # 使用流媒体音频容器
                 self.stream_audio_container = av.open(stream_url, options={
                     'rtsp_transport': 'tcp',
                     'stimeout': '5000000'
                 })
-                
                 audio_stream = self.stream_audio_container.streams.audio[0]
                 self.sample_rate = audio_stream.rate
                 self.channels = audio_stream.channels
@@ -114,7 +113,7 @@ class Microphone:
                 self.stream_audio_thread.start()
                 
             else:
-                # 本地模式：使用传入的 device_index 或者默认值
+                # 本地模式：使用传入的 device_index 或默认值
                 device_index = device_index if device_index is not None else self.current_device
                 self.current_device = device_index
 
@@ -145,9 +144,9 @@ class Microphone:
             self.logger.error(f"Error initializing audio device: {str(e)}")
             self.release()
             raise
-            
+
     def read(self, frames=None, chunk_size=None):
-        """从队列中读取音频数据"""
+        """从队列或音频流中读取音频数据"""
         try:
             if not self.is_initialized:
                 self.logger.info("Microphone未初始化，正在初始化...")
@@ -159,7 +158,7 @@ class Microphone:
 
             if self.is_stream_mode:
                 try:
-                    # 设置一个超时时间，等待队列中有音频数据
+                    # 超时获取队列中数据
                     data = self.audio_queue.get(timeout=3)
                 except Empty:
                     return False, None
@@ -174,7 +173,8 @@ class Microphone:
 
                 try:
                     read_frames = frames if frames else chunk_size if chunk_size else self.chunk_size
-                    data = np.frombuffer(self.stream.read(read_frames, exception_on_overflow=False), dtype=np.float32)
+                    raw_data = self.stream.read(read_frames, exception_on_overflow=False)
+                    data = np.frombuffer(raw_data, dtype=np.float32)
                 except Exception as e:
                     self.logger.error(f"读取音频流错误: {str(e)}")
                     return False, None
@@ -194,7 +194,7 @@ class Microphone:
 
     def get_info(self):
         """获取音频设备详细信息"""
-        if not self.is_initialized or self.stream is None:
+        if not self.is_initialized or (not self.stream and not self.stream_audio_container):
             return {
                 'initialized': False,
                 'channels': 0,
@@ -239,6 +239,7 @@ class Microphone:
                     audio_data = frame.to_ndarray()
                     if audio_data.dtype != np.float32:
                         audio_data = audio_data.astype(np.float32)
+                    # 保证数据形状正确
                     if audio_data.ndim == 1:
                         audio_data = audio_data.reshape(-1, 1)
                     if audio_data.max() > 1.0:
@@ -246,9 +247,9 @@ class Microphone:
                     if self.analysis_enabled and not self.audio_queue.full():
                         self.audio_queue.put_nowait(audio_data)
                 except Exception as e:
-                    self.logger.error(f"Error processing audio frame: {str(e)}")
+                    self.logger.error(f"Error processing audio frame: {e}")
         except Exception as e:
-            self.logger.error(f"Stream audio processing error: {str(e)}")
+            self.logger.error(f"Stream audio processing error: {e}")
 
     @staticmethod
     def _is_valid_device(index):
@@ -258,5 +259,5 @@ class Microphone:
                 device = devices[index]
                 return device['max_input_channels'] > 0
             return False
-        except:
+        except Exception:
             return False

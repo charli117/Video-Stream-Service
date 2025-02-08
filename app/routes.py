@@ -76,7 +76,6 @@ def switch_devices():
                     'error': f'Camera {camera_index} is not available'
                 }), 400
 
-            logger.info(f"Switching to camera {camera_index} and audio device {audio_index}")
             camera_success = video_analyzer.switch_camera(camera_index)
             audio_success = audio_analyzer.switch_audio(audio_index)
 
@@ -247,6 +246,9 @@ def start_analysis():
                 # 同时设置 AudioAnalyzer 和 Microphone 的分析状态
                 audio_analyzer.toggle_analysis(enabled)
                 audio_analyzer.microphone.set_analysis_enabled(enabled)
+                
+        if not enabled:
+            audio_analyzer.stop()
                 
         if success:
             return jsonify({

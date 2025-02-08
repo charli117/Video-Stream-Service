@@ -196,9 +196,6 @@ class BaseAnalyzer:
             dict: 包含保存文件信息的数据字典
         """
         try:
-            # 确保保存目录存在
-            os.makedirs(self.output_dir, exist_ok=True)
-
             # 生成文件名
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
             filename = f'audio_{timestamp}.wav'
@@ -328,7 +325,7 @@ class BaseAnalyzer:
         try:
             result = None
             # 根据数据类型判断处理方式
-            if isinstance(data, np.ndarray) and self.analysis_enabled:
+            if isinstance(data, np.ndarray):
                 if len(data.shape) == 3:  # 视频帧数据
                     extension = '.jpg'
                     self.cleanup_old_files(extension)
@@ -339,13 +336,9 @@ class BaseAnalyzer:
                         self.cleanup_old_files(extension)
                         result = self._save_audio_file(data)
 
-            if result is None:
-                self.logger.error("Failed to save data")
-                return
-
-            self.logger.info(f"Data saved: {result['filepath']}")
-            # TODO: 实际的LLM服务调用代码
-
+            if result:
+                # TODO: 实际的LLM服务调用代码
+                return result
         except Exception as e:
             self.logger.error(f"Error in LLM analysis: {str(e)}")
 
@@ -627,6 +620,9 @@ class AudioAnalyzer(BaseAnalyzer):
         self.current_device = None  # 当前设备属性
         self._audio_thread = None  # 音频线程属性
         self._max_retries = 3
+        # 用于缓存收到的音频数据
+        self.active_segment = []
+        self.accumulated_samples = 0
 
     def start(self, device_index=None):
         """启动音频分析器，并可接收设备索引参数"""
@@ -636,7 +632,7 @@ class AudioAnalyzer(BaseAnalyzer):
         try:
             self.logger.info("Starting audio analyzer thread...")
             # 如果传入设备索引，则使用传入值
-            if (device_index is not None):
+            if device_index is not None:
                 self.current_device = device_index
             elif self.current_device is None:
                 available_devices = self.microphone.list_devices()
@@ -697,10 +693,6 @@ class AudioAnalyzer(BaseAnalyzer):
             return False
 
     def generate_audio(self):
-        active_segment = []
-        is_silent = True
-        last_active_time = time.time()
-        silence_timeout = 3.0
         retry_count = 0
 
         while self.is_running:
@@ -718,10 +710,10 @@ class AudioAnalyzer(BaseAnalyzer):
                     time.sleep(1)
                     continue
 
-                # 成功读取后重置重试计数
+                # 读取成功后重置重试计数
                 retry_count = 0
 
-                # 转换音频数据为 np.ndarray 且为 float32 类型
+                # 确保数据为 np.ndarray 且为 float32 类型
                 audio_data = raw_data if isinstance(raw_data, np.ndarray) else np.array(raw_data)
                 if audio_data.dtype != np.float32:
                     audio_data = audio_data.astype(np.float32)
@@ -730,50 +722,42 @@ class AudioAnalyzer(BaseAnalyzer):
                 if audio_data.max() > 1.0:
                     audio_data = audio_data / 32768.0
 
-                # 如果音量足够大，则认为是活跃语音片段
+                if audio_data.ndim == 1:
+                    audio_data = audio_data.reshape(-1, 1)
+
+                # 判断是否为有效语音数据
                 amplitude = np.abs(audio_data).mean()
-                if amplitude > InitialConfig.AUDIO_CHANGE_THRESHOLD:
-                    active_segment.append(audio_data)
-                    total_samples = sum(seg.shape[0] for seg in active_segment)
-
-                    # 当累计的样本数达到阈值时，强制保存音频文件
-                    if total_samples >= self.min_samples:
-                        complete_segment = np.concatenate(active_segment, axis=0)
-                        save_result = self._save_audio_file(complete_segment)
-                        if save_result:
-                            self.logger.info(f"[generate_audio] 保存了音频文件: {save_result['filepath']}")
-                        else:
-                            self.logger.error("[generate_audio] 保存音频文件失败")
-                        active_segment = []  # 清空，开始新的采样
-                    is_silent = False
-                    last_active_time = time.time()
-                else:
-                    # 静默时，若当前片段非空且静默超过超时，则保存文件
-                    if not is_silent and active_segment:
-                        if (time.time() - last_active_time) >= silence_timeout:
-                            complete_segment = np.concatenate(active_segment, axis=0)
-                            save_result = self._save_audio_file(complete_segment)
-                            if save_result:
-                                self.logger.info(
-                                    f"[generate_audio] 检测到静默超时，已保存音频文件: {save_result['filepath']}")
-                            else:
-                                self.logger.error("[generate_audio] 保存音频文件失败")
-                            active_segment = []
-                            is_silent = True
-                    else:
-                        # 更新最后活跃时间
-                        last_active_time = time.time()
-
+                if amplitude > self.threshold:
+                    self.active_segment.append(audio_data)
+                    self.accumulated_samples += audio_data.shape[0]
             except Exception as e:
                 self.logger.error(f"Error generating audio: {str(e)}")
                 time.sleep(0.1)
+
+    def flush_audio_buffer(self):
+        if self.active_segment:
+            combined = np.concatenate(self.active_segment, axis=0)
+            self.logger.info(f"[flush_audio_buffer] 拼接后的音频时长：{combined.shape[0]} samples")
+            if combined.shape[0] < self.min_samples:
+                padding_samples = self.min_samples - combined.shape[0]
+                channels = combined.shape[1] if combined.ndim > 1 else 1
+                silence_padding = np.zeros((padding_samples, channels), dtype=np.float32)
+                combined = np.concatenate([combined, silence_padding], axis=0)
+                self.logger.info(f"[flush_audio_buffer] 添加静音padding：{padding_samples} samples")
+            save_result = self._llm_analyze(combined)
+            if save_result:
+                self.logger.info(f"[flush_audio_buffer] 保存了音频文件: {save_result['filepath']}")
+
+            self.active_segment = []
+            self.accumulated_samples = 0
 
     def stop(self):
         """
         停止音频分析器
         1. 检查是否正在运行
         2. 设置关闭标志并等待音频线程结束
-        3. 释放音频设备资源，并调用父类停止方法
+        3. 先flush缓存中的音频数据（不足最小长度则补静音）
+        4. 释放音频设备资源，并调用父类停止方法
         """
         if not self.is_running:
             return
@@ -781,7 +765,9 @@ class AudioAnalyzer(BaseAnalyzer):
         self.is_running = False
         if hasattr(self, '_audio_thread'):
             self._audio_thread.join(timeout=1.0)
-        self.microphone.release()
+        # flush剩余的音频数据
+        self.flush_audio_buffer()
+        # self.microphone.release()
         super().stop()
 
     def _analyze_loop(self):
@@ -849,7 +835,6 @@ class AudioAnalyzer(BaseAnalyzer):
     #     except Exception as e:
     #         self.logger.error(f"Error in audio change detection: {str(e)}")
     #         return False
-
 
     # def integrate_stream_audio_processing(self, stream_camera):
     #     """集成流式摄像头的音频处理"""

@@ -24,18 +24,18 @@ class Camera:
         try:
             if InitialConfig.CAMERA_TYPE == 'local':
                 self.camera = LocalCamera()
+                self.camera.start(source)
             elif InitialConfig.CAMERA_TYPE == 'stream':
                 self.camera = StreamCamera()
+                self.camera.start(source)
             else:
                 raise ValueError("Invalid CAMERA_TYPE in configuration")
 
-            self.camera.start(source)
-            # 同步所有必要的属性
             self.is_initialized = self.camera.is_initialized
             self.width = self.camera.width
             self.height = self.camera.height
             self.fps = self.camera.fps
-
+            self.logger.info("Camera started successfully")
         except Exception as e:
             self.logger.error(f"Error starting camera: {str(e)}")
             raise RuntimeError(f"Failed to start camera: {str(e)}")
@@ -68,7 +68,7 @@ class Camera:
         elif InitialConfig.CAMERA_TYPE == 'stream':
             return StreamCamera.list_cameras()
         else:
-            raise ValueError("Invalid CAMERA_TYPE in configuration")
+            return []
 
     @staticmethod
     def is_valid_camera(index):
@@ -77,7 +77,7 @@ class Camera:
         elif InitialConfig.CAMERA_TYPE == 'stream':
             return StreamCamera.is_valid_camera(index)
         else:
-            raise ValueError("Invalid CAMERA_TYPE in configuration")
+            return False
 
     @staticmethod
     def get_device_name(index):
@@ -86,7 +86,7 @@ class Camera:
         elif InitialConfig.CAMERA_TYPE == 'stream':
             return StreamCamera.get_device_name(index)
         else:
-            raise ValueError("Invalid CAMERA_TYPE in configuration")
+            return f'Unknown Camera {index}'
 
     @staticmethod
     def update_device_names(device_names):

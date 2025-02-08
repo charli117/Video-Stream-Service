@@ -14,24 +14,21 @@ video_analyzer = VideoAnalyzer()
 audio_analyzer = AudioAnalyzer()
 
 
-def create_app():
-    app = Flask(__name__,
-                template_folder=os.path.abspath('templates'),
-                static_folder=os.path.abspath('static'))
-
-    # 注册蓝图
-    from app.routes import main_bp
-    app.register_blueprint(main_bp)
-
-    # 初始化分析器
+def init_video_analyzer(app):
+    """初始化视频分析器"""
     try:
-        # 启动视频分析器
         video_analyzer.start(InitialConfig.DEFAULT_CAMERA_INDEX)
-        
-        # 初始化音频设备
+        app.logger.info("Video analyzer started successfully")
+    except Exception as e:
+        app.logger.error(f"Video analyzer initialization failed: {str(e)}")
+
+
+def init_audio_analyzer(app):
+    """初始化音频分析器"""
+    try:
         if 'audio' in InitialConfig.ANALYZER_TYPE:
             mic = Microphone()
-            # 如果是流媒体模式，不使用本地设备索引
+            # 流媒体模式下，不使用本地设备索引
             if InitialConfig.CAMERA_TYPE == 'stream':
                 mic.start()
                 audio_analyzer.microphone = mic
@@ -49,8 +46,22 @@ def create_app():
                 else:
                     app.logger.warning("No audio input devices found")
     except Exception as e:
-        app.logger.error(f"Failed to initialize audio analyzer: {str(e)}")
+        app.logger.error(f"Audio analyzer initialization failed: {str(e)}")
         if not video_analyzer.is_running:
             app.logger.error("Video analyzer failed to start")
+
+
+def create_app():
+    app = Flask(__name__,
+                template_folder=os.path.abspath('templates'),
+                static_folder=os.path.abspath('static'))
+
+    # 注册蓝图
+    from app.routes import main_bp
+    app.register_blueprint(main_bp)
+
+    # 分别初始化视频与音频分析器
+    init_video_analyzer(app)
+    init_audio_analyzer(app)
         
     return app

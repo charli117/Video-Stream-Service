@@ -47,16 +47,20 @@
                     <p><i class="fas fa-camera"></i> Camera: Loading...</p>
                     <p><i class="fas fa-expand"></i> Resolution: Loading...</p>
                     <p><i class="fas fa-tachometer-alt"></i> FPS: Loading...</p>
-                    <div class="changes-log">
-                        <h3>Video Changes Log</h3>
-                        <div class="log-entries" id="frameLogEntries">
-                            <!-- 视频变化记录将在这里动态添加 -->
-                        </div>
-                        
-                        <h3>Audio Changes Log</h3>
-                        <div class="log-entries" id="audioLogEntries">
-                            <!-- 音频变化记录将在这里动态添加 -->
-                        </div>
+                </div>
+                
+                <!-- 将日志部分独立出来 -->
+                <div id="video-changes-log" class="changes-log">
+                    <h3>Video Changes Log</h3>
+                    <div class="log-entries" id="frameLogEntries">
+                        <!-- 视频变化记录将在这里动态添加 -->
+                    </div>
+                </div>
+                
+                <div id="audio-changes-log" class="changes-log">
+                    <h3>Audio Changes Log</h3>
+                    <div class="log-entries" id="audioLogEntries">
+                        <!-- 音频变化记录将在这里动态添加 -->
                     </div>
                 </div>
             </div>
