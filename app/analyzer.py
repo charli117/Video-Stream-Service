@@ -612,6 +612,7 @@ class AudioAnalyzer(BaseAnalyzer):
         self.logger = logging.getLogger('AudioAnalyzer')
         self.audio_queue = Queue(maxsize=50)
         self.last_audio = None
+        self.is_stream_mode = InitialConfig.CAMERA_TYPE == 'stream'
         self.sample_rate = InitialConfig.AUDIO_SAMPLE_RATE
         self.chunk_size = InitialConfig.AUDIO_CHUNK_SIZE
         self.threshold = InitialConfig.AUDIO_CHANGE_THRESHOLD
@@ -619,7 +620,7 @@ class AudioAnalyzer(BaseAnalyzer):
         self.microphone = Microphone()
         self.current_device = None  # 当前设备属性
         self._audio_thread = None  # 音频线程属性
-        self._max_retries = 10
+        self._max_retries = 200
         # 用于缓存收到的音频数据
         self.active_segment = []
         self.accumulated_samples = 0
@@ -634,7 +635,7 @@ class AudioAnalyzer(BaseAnalyzer):
             # 如果传入设备索引，则使用传入值
             if device_index is not None:
                 self.current_device = device_index
-            elif self.current_device is None:
+            elif self.current_device is None and not self.is_stream_mode:
                 available_devices = self.microphone.list_devices()
                 if available_devices:
                     self.current_device = available_devices[0]['index']
@@ -642,7 +643,10 @@ class AudioAnalyzer(BaseAnalyzer):
                     raise RuntimeError("No audio devices available")
 
             # 使用传入或选定的设备启动音频设备
-            self.microphone.start(self.current_device)
+            if not self.is_stream_mode:
+                self.microphone.start(self.current_device)
+            # else:
+            #     self.microphone.start(0)
 
             # 明确设置为正在运行
             self.is_running = True
@@ -694,6 +698,24 @@ class AudioAnalyzer(BaseAnalyzer):
 
     def generate_audio(self):
         retry_count = 0
+        output_stream = None
+
+        # 如果是在流模式下，初始化输出流，确保配置与输入一致
+        if self.microphone.is_stream_mode:
+            try:
+                import pyaudio
+
+                pa = pyaudio.PyAudio()
+                output_stream = pa.open(
+                    format=pyaudio.paFloat32,
+                    channels=self.microphone.channels,
+                    rate=self.microphone.sample_rate,
+                    output=True,
+                    frames_per_buffer=self.microphone.chunk_size,
+                )
+                self.logger.info(f"Output stream started: {self.microphone.channels} channels @ {self.microphone.sample_rate}Hz")
+            except Exception as e:
+                self.logger.error(f"Error initializing output stream: {e}")
 
         while self.is_running:
             try:
@@ -717,33 +739,43 @@ class AudioAnalyzer(BaseAnalyzer):
                 audio_data = raw_data if isinstance(raw_data, np.ndarray) else np.array(raw_data)
                 if audio_data.dtype != np.float32:
                     audio_data = audio_data.astype(np.float32)
-
-                # 规范化音频数据
+                if audio_data.ndim == 1:
+                    audio_data = audio_data.reshape(-1, self.microphone.channels)
                 if audio_data.max() > 1.0:
                     audio_data = audio_data / 32768.0
 
-                if audio_data.ndim == 1:
-                    audio_data = audio_data.reshape(-1, 1)
-
-                # 判断是否为有效语音数据
+                # 现有的音频分析处理逻辑：
                 amplitude = np.abs(audio_data).mean()
-                if amplitude > self.threshold:
+                if amplitude > self.threshold and self.analysis_enabled:
                     self.active_segment.append(audio_data)
                     self.accumulated_samples += audio_data.shape[0]
+
+                # 通过输出流播放音频（仅在流模式下有效）
+                if output_stream is not None:
+                    try:
+                        output_stream.write(audio_data.tobytes())
+                    except Exception as e:
+                        self.logger.error(f"Error during audio playback: {e}")
+
             except Exception as e:
                 self.logger.error(f"Error generating audio: {str(e)}")
                 time.sleep(0.1)
+
+        # 清理输出流资源
+        if output_stream is not None:
+            output_stream.stop_stream()
+            output_stream.close()
 
     def flush_audio_buffer(self):
         if self.active_segment:
             combined = np.concatenate(self.active_segment, axis=0)
             self.logger.info(f"[flush_audio_buffer] 拼接后的音频时长：{combined.shape[0]} samples")
-            if combined.shape[0] < self.min_samples:
-                padding_samples = self.min_samples - combined.shape[0]
-                channels = combined.shape[1] if combined.ndim > 1 else 1
-                silence_padding = np.zeros((padding_samples, channels), dtype=np.float32)
-                combined = np.concatenate([combined, silence_padding], axis=0)
-                self.logger.info(f"[flush_audio_buffer] 添加静音padding：{padding_samples} samples")
+            # if combined.shape[0] < self.min_samples:
+            #     padding_samples = self.min_samples - combined.shape[0]
+            #     channels = combined.shape[1] if combined.ndim > 1 else 1
+            #     silence_padding = np.zeros((padding_samples, channels), dtype=np.float32)
+            #     combined = np.concatenate([combined, silence_padding], axis=0)
+            #     self.logger.info(f"[flush_audio_buffer] 添加静音padding：{padding_samples} samples")
             save_result = self._llm_analyze(combined)
             if save_result:
                 self.logger.info(f"[flush_audio_buffer] 保存了音频文件: {save_result['filepath']}")
@@ -767,7 +799,7 @@ class AudioAnalyzer(BaseAnalyzer):
             self._audio_thread.join(timeout=1.0)
         # flush剩余的音频数据
         self.flush_audio_buffer()
-        # self.microphone.release()
+        self.microphone.release()
         super().stop()
 
     def _analyze_loop(self):

@@ -60,14 +60,18 @@ class StreamCamera:
                 # 创建视频容器
                 self.video_container = av.open(rtmp_url, options={
                     'rtsp_transport': 'tcp',
-                    'stimeout': '5000000'
+                    'stimeout': '5000000',
+                    'reconnect_streamed': '1',
+                    'reconnect_delay_max': '2'
                 })
 
                 if self.enable_audio:
                     # 创建音频容器
                     self.audio_container = av.open(rtmp_url, options={
                         'rtsp_transport': 'tcp',
-                        'stimeout': '5000000'
+                        'stimeout': '5000000',
+                        'reconnect_streamed': '1',
+                        'reconnect_delay_max': '2'
                     })
 
                 self.is_running = True

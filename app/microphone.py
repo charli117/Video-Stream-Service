@@ -23,7 +23,7 @@ class Microphone:
         self.chunk_size = InitialConfig.AUDIO_CHUNK_SIZE
         self.is_initialized = False
         self.analysis_enabled = False
-        self.audio_queue = Queue(maxsize=100)
+        self.audio_queue = Queue(maxsize=50)
         self.is_stream_mode = InitialConfig.CAMERA_TYPE == 'stream'
         self.stream_audio_container = None
         self.stream_audio_thread = None
@@ -101,7 +101,9 @@ class Microphone:
                 # 使用流媒体音频容器
                 self.stream_audio_container = av.open(stream_url, options={
                     'rtsp_transport': 'tcp',
-                    'stimeout': '5000000'
+                    'stimeout': '5000000',
+                    'reconnect_streamed': '1',
+                    'reconnect_delay_max': '2'
                 })
                 audio_stream = self.stream_audio_container.streams.audio[0]
                 self.sample_rate = audio_stream.rate
@@ -145,12 +147,13 @@ class Microphone:
             self.release()
             raise
 
+    # 在流模式下，确保读取数据后做归一化、调整形状
     def read(self, frames=None, chunk_size=None):
         """从队列或音频流中读取音频数据"""
         try:
             if not self.is_initialized:
                 self.logger.info("Microphone未初始化，正在初始化...")
-                self.start()  # 此处不传device_index，保证流媒体模式正确
+                self.start()  # 此处不传 device_index，保证流媒体模式正确
                 time.sleep(0.1)
                 if not self.is_initialized:
                     self.logger.error("初始化失败")
@@ -158,8 +161,8 @@ class Microphone:
 
             if self.is_stream_mode:
                 try:
-                    # 超时获取队列中数据
-                    data = self.audio_queue.get(timeout=3)
+                    # 从队列中超时获取数据
+                    data = self.audio_queue.get_nowait()
                 except Empty:
                     return False, None
             else:
@@ -177,14 +180,8 @@ class Microphone:
                     data = np.frombuffer(raw_data, dtype=np.float32)
                 except Exception as e:
                     self.logger.error(f"读取音频流错误: {str(e)}")
+                    self.is_initialized = False
                     return False, None
-
-            if not isinstance(data, np.ndarray):
-                data = np.array(data)
-            if data.dtype != np.float32:
-                data = data.astype(np.float32)
-            if data.max() > 1.0:
-                data = data / 32768.0
 
             return True, data
 
@@ -231,25 +228,28 @@ class Microphone:
     def _stream_audio_processing(self):
         """流式音频处理线程"""
         try:
-            audio_stream = self.stream_audio_container.streams.audio[0]
-            for frame in self.stream_audio_container.decode(audio_stream):
+            for frame in self._process_stream(self.stream_audio_container,
+                                              self.stream_audio_container.streams.audio[0]):
                 if not self.is_initialized:
                     break
+
                 try:
-                    audio_data = frame.to_ndarray()
-                    if audio_data.dtype != np.float32:
-                        audio_data = audio_data.astype(np.float32)
-                    # 保证数据形状正确
-                    if audio_data.ndim == 1:
-                        audio_data = audio_data.reshape(-1, 1)
-                    if audio_data.max() > 1.0:
-                        audio_data = audio_data / 32768.0
-                    if self.analysis_enabled and not self.audio_queue.full():
-                        self.audio_queue.put_nowait(audio_data)
+                    if not self.audio_queue.full():
+                        self.audio_queue.put_nowait(frame.to_ndarray())
                 except Exception as e:
                     self.logger.error(f"Error processing audio frame: {e}")
         except Exception as e:
             self.logger.error(f"Stream audio processing error: {e}")
+
+    @staticmethod
+    def _process_stream(container, stream):
+        """单独处理视频或音频流"""
+        try:
+            for packet in container.demux(stream):
+                for frame in packet.decode():
+                    yield frame
+        except Exception as e:
+            print(f"Stream processing error: {e}")
 
     @staticmethod
     def _is_valid_device(index):

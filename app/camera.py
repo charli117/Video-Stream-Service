@@ -270,7 +270,6 @@ class StreamCamera:
         self._audio_callback = None
         self._silence_threshold = 0.02
         self.analysis_enabled = False
-        # 添加重连相关属性
         self.reconnect_attempts = 0
         self.max_reconnects = 3
         self.reconnect_delay = 2
@@ -451,7 +450,6 @@ class StreamCamera:
                     self.is_running = True
                     self.is_initialized = True  # 设置初始化标志
 
-                    # 现有的音频初始化代码...
                     # 创建独立的音频容器
                     self.audio_container = av.open(rtmp_url, options={
                         'rtsp_transport': 'tcp',
@@ -527,12 +525,16 @@ class StreamCamera:
             # 重新初始化视频和音频容器
             self.video_container = av.open(rtmp_url, options={
                 'rtsp_transport': 'tcp',
-                'stimeout': '5000000'
+                'stimeout': '5000000',
+                'reconnect_streamed': '1',
+                'reconnect_delay_max': '2'
             })
             
             self.audio_container = av.open(rtmp_url, options={
                 'rtsp_transport': 'tcp',
-                'stimeout': '5000000'
+                'stimeout': '5000000',
+                'reconnect_streamed': '1',
+                'reconnect_delay_max': '2'
             })
             
             # 重新获取视频和音频流
