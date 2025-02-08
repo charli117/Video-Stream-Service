@@ -299,34 +299,31 @@ class StreamCamera:
             for frame in self.process_stream(self.audio_container, self.audio_stream):
                 if not self.is_running:
                     break
-
-                if not self.analysis_enabled:
-                    continue
-
+                
                 try:
-                    # 转换音频帧为numpy数组并进行处理
+                    # 转换音频帧为numpy数组
                     audio_data = frame.to_ndarray()
                     
-                    # 确保数据类型为float32
+                    # 确保数据是float32类型
                     if audio_data.dtype != np.float32:
                         audio_data = audio_data.astype(np.float32)
-                    
-                    # 归一化
+                        
+                    # 规范化音频数据
                     if audio_data.max() > 1.0:
                         audio_data = audio_data / 32768.0
-                    
-                    # 保证数据形状正确
+                        
+                    # 确保数据形状正确
                     if audio_data.ndim == 1:
                         audio_data = audio_data.reshape(-1, 1)
                     
                     # 回调处理
-                    if self._audio_callback:
+                    if self._audio_callback and self.analysis_enabled:
                         self._audio_callback(audio_data)
-
+                        
                 except Exception as e:
                     self.logger.error(f"Error processing audio frame: {e}")
                     continue
-
+                    
         except Exception as e:
             self.logger.error(f"Audio processing loop error: {e}")
 
@@ -431,7 +428,6 @@ class StreamCamera:
             print(f"Stream processing error: {e}")
 
     def start(self, source=0):
-        """启动流式摄像头"""
         retry_count = 0
         max_retries = 3
         
@@ -514,34 +510,45 @@ class StreamCamera:
             current_time = time.time()
             if (current_time - self.last_reconnect_time) < self.reconnect_delay:
                 return False
-
+                
             self.last_reconnect_time = current_time
             self.reconnect_attempts += 1
             
             if self.reconnect_attempts > self.max_reconnects:
                 self.logger.error("Max reconnection attempts reached")
                 return False
-
-            self.cleanup()  # 清理旧连接
+                
+            self.cleanup()
             
             rtmp_url = self.get_stream_url()
             if not rtmp_url:
                 return False
-
-            # 重新初始化视频容器
+                
+            # 重新初始化视频和音频容器
             self.video_container = av.open(rtmp_url, options={
                 'rtsp_transport': 'tcp',
-                'stimeout': '5000000',
-                'reconnect': '1',
-                'reconnect_streamed': '1',
-                'reconnect_delay_max': '2'
+                'stimeout': '5000000'
             })
             
+            self.audio_container = av.open(rtmp_url, options={
+                'rtsp_transport': 'tcp',
+                'stimeout': '5000000'
+            })
+            
+            # 重新获取视频和音频流
             self.video_stream = self.video_container.streams.video[0]
+            try:
+                self.audio_stream = self.audio_container.streams.audio[0]
+                self.audio_thread = threading.Thread(target=self.audio_processing_loop)
+                self.audio_thread.daemon = True
+                self.audio_thread.start()
+            except Exception as e:
+                self.logger.error(f"Audio reconnection failed: {e}")
+                
             self.is_running = True
             self.logger.info("Stream reconnected successfully")
             return True
-
+            
         except Exception as e:
             self.logger.error(f"Reconnection failed: {e}")
             return False

@@ -6,9 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="c7800c4b-088e-4c62-8313-176bf30b8a3d" name="更改" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/static/css/style.css" beforeDir="false" afterPath="$PROJECT_DIR$/static/css/style.css" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/static/js/main.js" beforeDir="false" afterPath="$PROJECT_DIR$/static/js/main.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/index.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/camera.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/camera.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/config.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -532,7 +531,15 @@
       <option name="project" value="LOCAL" />
       <updated>1739005133795</updated>
     </task>
-    <option name="localTasksCounter" value="46" />
+    <task id="LOCAL-00046" summary="feat(main.js): 增强音频播放功能及界面优化">
+      <option name="closed" value="true" />
+      <created>1739018346702</created>
+      <option name="number" value="00046" />
+      <option name="presentableId" value="LOCAL-00046" />
+      <option name="project" value="LOCAL" />
+      <updated>1739018346702</updated>
+    </task>
+    <option name="localTasksCounter" value="47" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -562,7 +569,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="refactor(analyzer): 统一日志格式配置" />
     <MESSAGE value="refactor: 移除冗余的config导入" />
     <MESSAGE value="refactor: 重构配置类并优化摄像头初始化" />
     <MESSAGE value="feat: 添加分析开关接口及前端控制" />
@@ -587,7 +593,8 @@
     <MESSAGE value="refactor(microphone.py, analyzer.py, run.py, routes.py, main.js, style.css): 优化音频设备初始化和分析逻辑，添加错误处理和状态管理" />
     <MESSAGE value="refactor(analyzer.py): 移除音频数据转换日志，简化日志记录" />
     <MESSAGE value="refactor(microphone.py, camera.py): 优化音频处理和重连机制，改进资源清理逻辑" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor(microphone.py, camera.py): 优化音频处理和重连机制，改进资源清理逻辑" />
+    <MESSAGE value="feat(main.js): 增强音频播放功能及界面优化" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat(main.js): 增强音频播放功能及界面优化" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -602,7 +609,7 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/Video_Stream_Service$get_rtsp.coverage" NAME="get_rtsp 覆盖结果" MODIFIED="1738848531659" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
-    <SUITE FILE_PATH="coverage/Video_Stream_Service$run.coverage" NAME="run 覆盖结果" MODIFIED="1739018175908" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/Video_Stream_Service$run.coverage" NAME="run 覆盖结果" MODIFIED="1739019159347" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/Video_Stream_Service$streamcamera.coverage" NAME="streamcamera 覆盖结果" MODIFIED="1738926894872" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
   </component>
 </project>
