@@ -16,6 +16,7 @@ from app.camera import Camera
 from app.microphone import Microphone
 from config import InitialConfig
 from logging.handlers import RotatingFileHandler
+from librosa import feature as librosa_feature
 from skimage.metrics import structural_similarity as ssim
 
 
@@ -362,6 +363,8 @@ class VideoAnalyzer(BaseAnalyzer):
         self.fps = 0
         self.camera = Camera()
         self.video_source = None
+        self._blur_threshold = 100.0
+        self._similarity_threshold = 0.8
         self._frame_times = deque(maxlen=30)
         self._last_frame_time = time.time()
         self.max_display_height = InitialConfig.MAX_DISPLAY_HEIGHT
@@ -478,7 +481,32 @@ class VideoAnalyzer(BaseAnalyzer):
     def _analyze_loop(self):
         """分析视频帧的循环"""
 
+        def is_blurry(frame_image):
+            """
+            使用拉普拉斯变换方法检测帧是否模糊。
+
+            参数:
+                frame_image: 输入帧。
+
+            返回:
+                bool: 如果帧是模糊的返回 True，否则返回 False。
+            """
+            gray = cv2.cvtColor(frame_image, cv2.COLOR_BGR2GRAY)
+            laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+            return laplacian_var < self._blur_threshold
+
         def check_frame_change(frame1, frame2):
+            """
+            使用 SSIM 检查两帧之间是否有显著变化，并过滤掉模糊帧。
+
+            参数:
+                frame1: 第一帧。
+                frame2: 第二帧。
+                blur_threshold: 过滤模糊帧的方差阈值。
+
+            返回:
+                bool: 如果有显著变化且帧不模糊返回 True，否则返回 False。
+            """
             try:
                 if frame1 is None or frame2 is None:
                     return False
@@ -486,18 +514,27 @@ class VideoAnalyzer(BaseAnalyzer):
                 if frame1.shape != frame2.shape:
                     frame2 = cv2.resize(frame2, (frame1.shape[1], frame1.shape[0]))
 
+                if is_blurry(frame1) or is_blurry(frame2):
+                    return False
+
                 gray1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
                 gray2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
 
                 score = ssim(gray1, gray2)
-                return score < 0.8
+                return score < self._similarity_threshold
 
             except Exception as err:
-                self.logger.error(f"Error comparing frames: {str(err)}")
+                self.logger.error(f"比较帧时出错: {str(err)}")
                 return False
 
         def process_change_frames(frames):
-            """处理变化帧"""
+            """
+            处理变化帧,将变化帧拼接为一个大帧
+            Args:
+                frames: 帧列表
+            Returns:
+                numpy.ndarray: 处理后的帧
+            """
             try:
                 if not frames:
                     return None
@@ -700,6 +737,9 @@ class AudioAnalyzer(BaseAnalyzer):
         retry_count = 0
         output_stream = None
 
+        # 初始化 error_state 防止后续使用错误
+        self.error_state = None
+
         # 如果是在流模式下，初始化输出流，确保配置与输入一致
         if self.microphone.is_stream_mode:
             try:
@@ -732,26 +772,40 @@ class AudioAnalyzer(BaseAnalyzer):
                     time.sleep(3)
                     continue
 
-                # 读取成功后重置重试计数
+                # 重置错误计数
                 retry_count = 0
 
-                # 确保数据为 np.ndarray 且为 float32 类型
-                audio_data = raw_data if isinstance(raw_data, np.ndarray) else np.array(raw_data)
-                if audio_data.dtype != np.float32:
-                    audio_data = audio_data.astype(np.float32)
-                if audio_data.ndim == 1:
-                    audio_data = audio_data.reshape(-1, self.microphone.channels)
-                if audio_data.max() > 1.0:
-                    audio_data = audio_data / 32768.0
+                # 转换数据处理
+                audio_data = self._convert_audio_data(raw_data)
 
-                # 现有的音频分析处理逻辑：
-                amplitude = np.abs(audio_data).mean()
-                if amplitude > self.threshold and self.analysis_enabled:
-                    self.logger.info(f"符合条件的音频流检测: amplitude = {amplitude}")
+                # 如果 self.last_audio 未初始化，则直接赋值，避免空处理
+                if self.last_audio is None:
+                    self.last_audio = audio_data.copy()
+                    continue
+
+                # 音频分析处理逻辑（振幅均值计算）：
+                # similarity = np.abs(audio_data).mean()
+                # if similarity > self.threshold and self.analysis_enabled:
+
+                # 音频分析处理逻辑（MFCC 梅尔频率倒谱系数 计算）：
+                last_audio = self.last_audio.astype(np.float32).flatten()
+                current_audio = audio_data.astype(np.float32).flatten()
+
+                mfcc1 = librosa_feature.mfcc(y=last_audio, sr=self.sample_rate)
+                mfcc2 = librosa_feature.mfcc(y=current_audio, sr=self.sample_rate)
+
+                similarity = np.corrcoef(mfcc1.flatten(), mfcc2.flatten())[0, 1]
+
+                # 如果相似度低于阈值且分析启用，则处理音频数据
+                if similarity < self.threshold and self.analysis_enabled:
+                    self.logger.info(f"符合条件的音频流检测: amplitude = {similarity}")
                     self.active_segment.append(audio_data)
                     self.accumulated_samples += audio_data.shape[0]
 
-                # 通过输出流播放音频（仅在流模式下有效）
+                # 更新 last_audio，后续对比使用当前数据
+                self.last_audio = audio_data.copy()
+
+                # 播放音频（仅在流模式下有效）
                 if output_stream is not None:
                     try:
                         output_stream.write(audio_data.tobytes())
@@ -838,53 +892,15 @@ class AudioAnalyzer(BaseAnalyzer):
                 self.logger.error(f"Error in audio analysis: {str(e)}")
             time.sleep(0.1)
 
-    # def process_stream_audio(self, audio_data):
-    #     """处理流式音频数据"""
-    #     try:
-    #         if self.analysis_enabled:
-    #             # 直接调用 LLM 分析
-    #             self._llm_analyze(audio_data)
-    #
-    #     except Exception as e:
-    #         self.logger.error(f"Error processing stream audio: {str(e)}")
-
-    # def _detect_audio_change(self, audio_data):
-    #     """Detect audio changes using MFCC features"""
-    #     if self.last_audio is None or not isinstance(audio_data, np.ndarray):
-    #         return False
-
-    #     try:
-    #         # 确保音频数据是浮点型
-    #         last_audio = self.last_audio.astype(np.float32).flatten()
-    #         current_audio = audio_data.astype(np.float32).flatten()
-
-    #         # 使用完整的导入路径计算音频特征
-    #         mfcc1 = librosa_feature.mfcc(y=last_audio, sr=self.sample_rate)
-    #         mfcc2 = librosa_feature.mfcc(y=current_audio, sr=self.sample_rate)
-
-    #         # Calculate similarity
-    #         similarity = np.corrcoef(mfcc1.flatten(), mfcc2.flatten())[0, 1]
-
-    #         # Add detailed logging
-    #         if similarity < self.threshold:
-    #             self.logger.info(f"Audio change detected - Similarity: {similarity:.3f} (Threshold: {self.threshold})")
-
-    #         return similarity < self.threshold
-
-    #     except Exception as e:
-    #         self.logger.error(f"Error in audio change detection: {str(e)}")
-    #         return False
-
-    # def integrate_stream_audio_processing(self, stream_camera):
-    #     """集成流式摄像头的音频处理"""
-    #     try:
-    #         if not isinstance(stream_camera, Camera):
-    #             raise ValueError("Invalid stream camera instance")
-    #
-    #         # 设置音频回调函数
-    #         stream_camera.set_audio_callback(self.process_stream_audio)
-    #         self.logger.info("Integrated audio processing with StreamCamera")
-    #
-    #     except Exception as e:
-    #         self.logger.error(f"Error integrating audio processing: {str(e)}")
-    #         return False
+    def _convert_audio_data(self, raw_data):
+        """
+        辅助函数：确保音频数据为 np.ndarray 且为 float32 类型，同时做形状调整和归一化
+        """
+        audio_data = raw_data if isinstance(raw_data, np.ndarray) else np.array(raw_data)
+        if audio_data.dtype != np.float32:
+            audio_data = audio_data.astype(np.float32)
+        if audio_data.ndim == 1:
+            audio_data = audio_data.reshape(-1, self.microphone.channels)
+        if audio_data.max() > 1.0:
+            audio_data = audio_data / 32768.0
+        return audio_data

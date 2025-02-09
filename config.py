@@ -27,7 +27,7 @@ class InitialConfig:
 
     # 音频分析配置
     AUDIO_SAMPLE_RATE = 16000  # 降低采样率
-    AUDIO_CHUNK_SIZE = 1024   # 降低块大小
+    AUDIO_CHUNK_SIZE = 2048   # 降低块大小
     AUDIO_CHANGE_THRESHOLD = 0.001  # 降低阈值使检测更敏感
     MAX_SAVED_FILES = 1000
     MIN_DURATION = 1  # 最小持续时间
