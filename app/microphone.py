@@ -23,7 +23,7 @@ class Microphone:
         self.chunk_size = InitialConfig.AUDIO_CHUNK_SIZE
         self.is_initialized = False
         self.analysis_enabled = False
-        self.audio_queue = Queue(maxsize=10)
+        self.audio_queue = Queue(maxsize=5)
         self.is_stream_mode = InitialConfig.CAMERA_TYPE == 'stream'
         self.stream_audio_container = None
         self.stream_audio_thread = None

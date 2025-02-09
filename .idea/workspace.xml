@@ -4,12 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="c7800c4b-088e-4c62-8313-176bf30b8a3d" name="更改" comment="">
+    <list default="true" id="c7800c4b-088e-4c62-8313-176bf30b8a3d" name="更改" comment="feat(microphone.py, config.py): 优化音频队列大小及变化阈值">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/analyzer.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/analyzer.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/microphone.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/microphone.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/config.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/static/css/style.css" beforeDir="false" afterPath="$PROJECT_DIR$/static/css/style.css" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -172,14 +170,6 @@
       <workItem from="1738918836235" duration="15396000" />
       <workItem from="1738935093269" duration="3710000" />
       <workItem from="1738974818666" duration="1213000" />
-    </task>
-    <task id="LOCAL-00005" summary="refactor: 重构配置类并优化摄像头初始化">
-      <option name="closed" value="true" />
-      <created>1738731547324</created>
-      <option name="number" value="00005" />
-      <option name="presentableId" value="LOCAL-00005" />
-      <option name="project" value="LOCAL" />
-      <updated>1738731547324</updated>
     </task>
     <task id="LOCAL-00006" summary="feat: 添加分析开关接口及前端控制">
       <option name="closed" value="true" />
@@ -565,7 +555,15 @@
       <option name="project" value="LOCAL" />
       <updated>1739073679211</updated>
     </task>
-    <option name="localTasksCounter" value="54" />
+    <task id="LOCAL-00054" summary="feat(microphone.py, config.py): 优化音频队列大小及变化阈值">
+      <option name="closed" value="true" />
+      <created>1739077689873</created>
+      <option name="number" value="00054" />
+      <option name="presentableId" value="LOCAL-00054" />
+      <option name="project" value="LOCAL" />
+      <updated>1739077689873</updated>
+    </task>
+    <option name="localTasksCounter" value="55" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -595,7 +593,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="feat(main.js): 添加分析开关接口及前端控制，调整样式宽度" />
     <MESSAGE value="feat: 更新分析开关接口路径及前端控制" />
     <MESSAGE value="feat: 更新前端样式及结构优化" />
     <MESSAGE value="feat: 增加摄像头设备名称获取与显示功能" />
@@ -620,7 +617,8 @@
     <MESSAGE value="feat(microphone.py, camera.py, config.py): 优化音频队列大小，增加流媒体重连配置" />
     <MESSAGE value="feat(microphone.py, analyzer.py): 优化音频队列大小及重试次数" />
     <MESSAGE value="feat(analyzer.py, config.py): 更新音频缓冲区处理逻辑，调整音频变化阈值" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat(analyzer.py, config.py): 更新音频缓冲区处理逻辑，调整音频变化阈值" />
+    <MESSAGE value="feat(microphone.py, config.py): 优化音频队列大小及变化阈值" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat(microphone.py, config.py): 优化音频队列大小及变化阈值" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -635,7 +633,7 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/Video_Stream_Service$get_rtsp.coverage" NAME="get_rtsp 覆盖结果" MODIFIED="1738848531659" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
-    <SUITE FILE_PATH="coverage/Video_Stream_Service$run.coverage" NAME="run 覆盖结果" MODIFIED="1739077557999" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/Video_Stream_Service$run.coverage" NAME="run 覆盖结果" MODIFIED="1739077944044" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/Video_Stream_Service$streamcamera.coverage" NAME="streamcamera 覆盖结果" MODIFIED="1738926894872" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
   </component>
 </project>

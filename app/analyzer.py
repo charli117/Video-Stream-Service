@@ -669,6 +669,8 @@ class AudioAnalyzer(BaseAnalyzer):
 
         try:
             self.logger.info("Starting audio analyzer thread...")
+
+            # 如果有传入设备索引或之前有记录则使用，否则选择默认设备
             if device_index is not None:
                 self.current_device = device_index
             elif self.current_device is None and not self.microphone.is_stream_mode:
@@ -678,13 +680,18 @@ class AudioAnalyzer(BaseAnalyzer):
                 else:
                     raise RuntimeError("No audio devices available")
 
+            # 调用stop确保旧资源完全释放, 并重新创建Microphone实例避免状态残留
+            if self.is_running:
+                self.stop()
+            self.microphone = Microphone()
+
             # 启动音频设备
             if not self.microphone.is_stream_mode:
                 self.microphone.start(self.current_device)
             else:
                 self.microphone.start()
 
-            # 等待音频设备初始化成功
+            # 等待音频设备初始化成功, 采用轮询等待而不固化等待时间
             timeout = 5
             start_time = time.time()
             while not self.microphone.is_initialized and time.time() - start_time < timeout:
@@ -700,37 +707,34 @@ class AudioAnalyzer(BaseAnalyzer):
 
             # 启动父类线程管理（如果有额外处理）
             super().start()
+
         except Exception as e:
             self.is_running = False
             self.logger.error(f"Failed to start audio analyzer: {str(e)}")
             raise
 
     def switch_audio(self, device_index):
-        """切换音频输入设备"""
+        """切换音频输入设备，利用完整停止流程重启音频分析器"""
         try:
             self.logger.info(f"切换音频设备到: {device_index}")
 
-            # 停止当前分析
+            # 记录当前分析状态
             was_analyzing = self.analysis_enabled
-            self.analysis_enabled = False
 
-            # 释放旧设备资源
-            if self.microphone:
-                self.microphone.release()
+            # 停止音频分析器及相关线程，释放所有资产
+            self.stop()
 
-            time.sleep(0.5)  # 等待资源释放
-
-            # 初始化新设备
+            # 创建新的 Microphone 实例
+            self.microphone = Microphone()
             self.current_device = device_index
-            self.microphone.is_initialized = False
-            self.microphone.start(device_index)
+
+            # 重新启动音频分析器
+            self.start(device_index)
 
             # 恢复之前的分析状态
-            if was_analyzing:
-                self.analysis_enabled = True
+            self.analysis_enabled = was_analyzing
 
             return True
-
         except Exception as e:
             self.logger.error(f"Error switching audio device: {str(e)}")
             return False
