@@ -768,19 +768,25 @@ class AudioAnalyzer(BaseAnalyzer):
             output_stream.close()
 
     def flush_audio_buffer(self):
+        """
+        刷新累积的音频缓冲区。
+        - 拼接到目前为止收集的音频片段。
+        - 确保合并后的音频满足最小持续时间要求。
+        - 保存合并后的音频数据以供进一步分析。
+        - 重置活动片段和累积样本。
+
+        通常在停止音频分析器时调用此方法，以确保处理所有收集的音频数据。
+        """
         if self.active_segment:
+            # 拼接所有收集的音频片段
             combined = np.concatenate(self.active_segment, axis=0)
-            self.logger.info(f"[flush_audio_buffer] 拼接后的音频时长：{combined.shape[0]} samples")
-            # if combined.shape[0] < self.min_samples:
-            #     padding_samples = self.min_samples - combined.shape[0]
-            #     channels = combined.shape[1] if combined.ndim > 1 else 1
-            #     silence_padding = np.zeros((padding_samples, channels), dtype=np.float32)
-            #     combined = np.concatenate([combined, silence_padding], axis=0)
-            #     self.logger.info(f"[flush_audio_buffer] 添加静音padding：{padding_samples} samples")
+
+            # 保存合并后的音频数据
             save_result = self._llm_analyze(combined)
             if save_result:
                 self.logger.info(f"[flush_audio_buffer] 保存了音频文件: {save_result['filepath']}")
 
+            # 重置活动片段和累积样本
             self.active_segment = []
             self.accumulated_samples = 0
 
@@ -800,7 +806,7 @@ class AudioAnalyzer(BaseAnalyzer):
             self._audio_thread.join(timeout=1.0)
         # flush剩余的音频数据
         self.flush_audio_buffer()
-        self.microphone.release()
+        # self.microphone.release()
         super().stop()
 
     def _analyze_loop(self):
