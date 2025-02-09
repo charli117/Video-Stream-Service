@@ -669,35 +669,37 @@ class AudioAnalyzer(BaseAnalyzer):
 
         try:
             self.logger.info("Starting audio analyzer thread...")
-            # 如果传入设备索引，则使用传入值
             if device_index is not None:
                 self.current_device = device_index
-            elif self.current_device is None and not self.is_stream_mode:
+            elif self.current_device is None and not self.microphone.is_stream_mode:
                 available_devices = self.microphone.list_devices()
                 if available_devices:
                     self.current_device = available_devices[0]['index']
                 else:
                     raise RuntimeError("No audio devices available")
 
-            # 使用传入或选定的设备启动音频设备
-            if not self.is_stream_mode:
+            # 启动音频设备
+            if not self.microphone.is_stream_mode:
                 self.microphone.start(self.current_device)
-            # else:
-            #     self.microphone.start(0)
+            else:
+                self.microphone.start()
 
-            # 明确设置为正在运行
+            # 等待音频设备初始化成功
+            timeout = 5
+            start_time = time.time()
+            while not self.microphone.is_initialized and time.time() - start_time < timeout:
+                time.sleep(0.1)
+            if not self.microphone.is_initialized:
+                raise RuntimeError("Audio设备初始化失败")
+
             self.is_running = True
-
-            # 启动音频采集线程
             self._audio_thread = Thread(target=self.generate_audio, name="AudioCaptureThread")
             self._audio_thread.daemon = True
             self._audio_thread.start()
-            self.logger.info("Audio capture thread started")
-
-            # 启动父类线程管理（如果父类内部有额外处理）
-            super().start()
             self.logger.info(f"AudioAnalyzer started successfully with device {self.current_device}")
 
+            # 启动父类线程管理（如果有额外处理）
+            super().start()
         except Exception as e:
             self.is_running = False
             self.logger.error(f"Failed to start audio analyzer: {str(e)}")
@@ -767,7 +769,7 @@ class AudioAnalyzer(BaseAnalyzer):
                             'code': 'AUDIO_READ_FAILED',
                             'message': '无法读取音频数据,请检查设备是否正常工作'
                         }
-                        self.logger.error(f"[generate_audio] 连续{self._max_retries}次无法读取音频数据")
+                        self.logger.error(f"[generate_audio] 连续 {self._max_retries}次 无法读取音频数据")
                         break
                     time.sleep(3)
                     continue
@@ -787,18 +789,16 @@ class AudioAnalyzer(BaseAnalyzer):
                 # similarity = np.abs(audio_data).mean()
                 # if similarity > self.threshold and self.analysis_enabled:
 
-                # 音频分析处理逻辑（MFCC 梅尔频率倒谱系数 计算）：
-                last_audio = self.last_audio.astype(np.float32).flatten()
-                current_audio = audio_data.astype(np.float32).flatten()
+                # 音频分析处理逻辑（MFCC 梅尔频率倒谱系数 计算），为MFCC计算动态设置n_fft，避免 n_fft 大于输入长度
+                n_fft_value = min(2048, len(audio_data.flatten()))
 
-                mfcc1 = librosa_feature.mfcc(y=last_audio, sr=self.sample_rate)
-                mfcc2 = librosa_feature.mfcc(y=current_audio, sr=self.sample_rate)
-
+                mfcc1 = librosa_feature.mfcc(y=self.last_audio.flatten(), sr=self.sample_rate, n_fft=n_fft_value)
+                mfcc2 = librosa_feature.mfcc(y=audio_data.flatten(), sr=self.sample_rate, n_fft=n_fft_value)
                 similarity = np.corrcoef(mfcc1.flatten(), mfcc2.flatten())[0, 1]
 
                 # 如果相似度低于阈值且分析启用，则处理音频数据
                 if similarity < self.threshold and self.analysis_enabled:
-                    self.logger.info(f"符合条件的音频流检测: amplitude = {similarity}")
+                    self.logger.info(f"符合条件的音频流检测: similarity = {similarity}")
                     self.active_segment.append(audio_data)
                     self.accumulated_samples += audio_data.shape[0]
 
@@ -849,8 +849,9 @@ class AudioAnalyzer(BaseAnalyzer):
         停止音频分析器
         1. 检查是否正在运行
         2. 设置关闭标志并等待音频线程结束
-        3. 先flush缓存中的音频数据（不足最小长度则补静音）
-        4. 释放音频设备资源，并调用父类停止方法
+        3. 先flush缓存中的音频数据
+        4. 释放音频资源后，重新创建 microphone 实例以便后续初始化
+        5. 调用父类停止方法
         """
         if not self.is_running:
             return
@@ -860,7 +861,10 @@ class AudioAnalyzer(BaseAnalyzer):
             self._audio_thread.join(timeout=1.0)
         # flush剩余的音频数据
         self.flush_audio_buffer()
-        # self.microphone.release()
+        # 释放音频资源后，重新创建 microphone 实例以便后续初始化
+        if self.microphone:
+            self.microphone.release()
+            self.microphone = Microphone()
         super().stop()
 
     def _analyze_loop(self):

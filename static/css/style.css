@@ -287,9 +287,10 @@ button i {
 }
 
 .log-entries {
-    max-height: 300px;
+    max-height: 150px;
     padding-right: 15px;
     margin-top: 15px;
+    overflow-y: auto;
 }
 
 .log-entry {
