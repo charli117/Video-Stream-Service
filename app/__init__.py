@@ -30,7 +30,7 @@ def init_audio_analyzer(app):
             mic = Microphone()
             # 流媒体模式下，不使用本地设备索引
             if InitialConfig.CAMERA_TYPE == 'stream':
-                mic.start()
+                # 去掉 mic.start() 调用，直接将麦克风传递到音频分析器
                 audio_analyzer.microphone = mic
                 audio_analyzer.start()
                 app.logger.info("Audio analyzer initialized in stream mode")

@@ -14,12 +14,13 @@ class Microphone:
     _device_names = {}  # 类变量，用于存储设备名称映射
     logger = logging.getLogger('Microphone')  # 定义类级别的 logger
 
-    def __init__(self):
+    def __init__(self, device_name=None):
+        self.device_name = device_name
         self.stream = None
         self.audio = None
         self.current_device = 0
-        self.sample_rate = InitialConfig.AUDIO_SAMPLE_RATE
         self._channels = None
+        self.sample_rate = InitialConfig.AUDIO_SAMPLE_RATE
         self.chunk_size = InitialConfig.AUDIO_CHUNK_SIZE
         self.is_initialized = False
         self.analysis_enabled = False
@@ -27,6 +28,8 @@ class Microphone:
         self.is_stream_mode = InitialConfig.CAMERA_TYPE == 'stream'
         self.stream_audio_container = None
         self.stream_audio_thread = None
+        self.container = None
+        self.audio_stream = None
 
     @property
     def channels(self):
@@ -86,7 +89,6 @@ class Microphone:
     def start(self, device_index=None):
         """启动音频设备"""
         try:
-            self.logger.info("Initializing audio device")
             if self.is_initialized:
                 self.release()  # 释放现有资源
                 time.sleep(0.5)
@@ -105,11 +107,12 @@ class Microphone:
                     'reconnect_streamed': '1',
                     'reconnect_delay_max': '2'
                 })
+
                 audio_stream = self.stream_audio_container.streams.audio[0]
                 self.sample_rate = audio_stream.rate
                 self.channels = audio_stream.channels
                 self.logger.info(f"Stream audio initialized: {self.sample_rate}Hz, {self.channels} channels")
-                
+
                 self.stream_audio_thread = threading.Thread(target=self._stream_audio_processing)
                 self.stream_audio_thread.daemon = True
                 self.stream_audio_thread.start()
@@ -140,10 +143,10 @@ class Microphone:
                     self.stream.start_stream()
                 
             self.is_initialized = True
-            self.logger.info(f"Audio device initialized successfully: {self.channels} channels @ {self.sample_rate}Hz")
+            self.logger.info(f"音频设备初始化成功: {self.channels} channels @ {self.sample_rate}Hz")
 
         except Exception as e:
-            self.logger.error(f"Error initializing audio device: {str(e)}")
+            self.logger.error(f"初始化音频设备错误: {str(e)}")
             self.release()
             raise
 
@@ -224,6 +227,10 @@ class Microphone:
             self.is_initialized = False
         except Exception as e:
             self.logger.error(f"Error releasing audio device: {str(e)}")
+
+        if self.container:
+            self.container.close()
+        self.initialized = False
 
     def _stream_audio_processing(self):
         """流式音频处理线程"""

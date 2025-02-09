@@ -363,7 +363,7 @@ class VideoAnalyzer(BaseAnalyzer):
         self.fps = 0
         self.camera = Camera()
         self.video_source = None
-        self._blur_threshold = 100.0
+        self._blur_threshold = 50.0
         self._similarity_threshold = 0.8
         self._frame_times = deque(maxlen=30)
         self._last_frame_time = time.time()
@@ -647,7 +647,7 @@ class AudioAnalyzer(BaseAnalyzer):
     def __init__(self):
         super().__init__()
         self.logger = logging.getLogger('AudioAnalyzer')
-        self.audio_queue = Queue(maxsize=50)
+        self.audio_queue = Queue(maxsize=10)
         self.last_audio = None
         self.is_stream_mode = InitialConfig.CAMERA_TYPE == 'stream'
         self.sample_rate = InitialConfig.AUDIO_SAMPLE_RATE
@@ -661,6 +661,9 @@ class AudioAnalyzer(BaseAnalyzer):
         # 用于缓存收到的音频数据
         self.active_segment = []
         self.accumulated_samples = 0
+        self.retry_interval = 15
+        self.retry_thread = None
+        self.stopped = False
 
     def start(self, device_index=None):
         """启动音频分析器，并可接收设备索引参数"""
@@ -668,36 +671,38 @@ class AudioAnalyzer(BaseAnalyzer):
             return
 
         try:
-            self.logger.info("Starting audio analyzer thread...")
-
-            # 如果有传入设备索引或之前有记录则使用，否则选择默认设备
+            # 设置设备索引
             if device_index is not None:
                 self.current_device = device_index
-            elif self.current_device is None and not self.microphone.is_stream_mode:
+            elif self.current_device is None and not self.is_stream_mode:
                 available_devices = self.microphone.list_devices()
                 if available_devices:
                     self.current_device = available_devices[0]['index']
                 else:
                     raise RuntimeError("No audio devices available")
 
-            # 调用stop确保旧资源完全释放, 并重新创建Microphone实例避免状态残留
+            # 释放旧资源
             if self.is_running:
                 self.stop()
             self.microphone = Microphone()
 
             # 启动音频设备
-            if not self.microphone.is_stream_mode:
+            if not self.is_stream_mode:
                 self.microphone.start(self.current_device)
             else:
                 self.microphone.start()
 
-            # 等待音频设备初始化成功, 采用轮询等待而不固化等待时间
+            # 等待初始化，超时后更新错误状态而非直接抛出异常
             timeout = 5
             start_time = time.time()
             while not self.microphone.is_initialized and time.time() - start_time < timeout:
                 time.sleep(0.1)
             if not self.microphone.is_initialized:
-                raise RuntimeError("Audio设备初始化失败")
+                self.audio_error = {"code": "INIT_FAILED", "message": "Audio设备初始化失败"}
+                self.logger.error("Audio设备初始化失败")
+                # 后台重试，不阻塞整个项目运行
+                self._start_initialization_monitor()
+                return
 
             self.is_running = True
             self._audio_thread = Thread(target=self.generate_audio, name="AudioCaptureThread")
@@ -705,13 +710,25 @@ class AudioAnalyzer(BaseAnalyzer):
             self._audio_thread.start()
             self.logger.info(f"AudioAnalyzer started successfully with device {self.current_device}")
 
-            # 启动父类线程管理（如果有额外处理）
             super().start()
 
-        except Exception as e:
+        except Exception:
             self.is_running = False
-            self.logger.error(f"Failed to start audio analyzer: {str(e)}")
-            raise
+            # 同样启动后台重试机制
+            self._start_initialization_monitor()
+            return
+
+    def _start_initialization_monitor(self):
+        def monitor():
+            while not self.stopped:
+                if self.microphone.initialized:
+                    logging.info("音频设备已初始化，停止重试。")
+                    break
+                logging.info("正在后台重试音频设备初始化...")
+                self.microphone.start()  # 重试初始化
+                time.sleep(self.retry_interval)
+        self.retry_thread = threading.Thread(target=monitor, daemon=True)
+        self.retry_thread.start()
 
     def switch_audio(self, device_index):
         """切换音频输入设备，利用完整停止流程重启音频分析器"""
@@ -747,21 +764,21 @@ class AudioAnalyzer(BaseAnalyzer):
         self.error_state = None
 
         # 如果是在流模式下，初始化输出流，确保配置与输入一致
-        if self.microphone.is_stream_mode:
-            try:
-                import pyaudio
-
-                pa = pyaudio.PyAudio()
-                output_stream = pa.open(
-                    format=pyaudio.paFloat32,
-                    channels=self.microphone.channels,
-                    rate=self.microphone.sample_rate,
-                    output=True,
-                    frames_per_buffer=self.microphone.chunk_size,
-                )
-                self.logger.info(f"Output stream started: {self.microphone.channels} channels @ {self.microphone.sample_rate}Hz")
-            except Exception as e:
-                self.logger.error(f"Error initializing output stream: {e}")
+        # if self.microphone.is_stream_mode:
+        #     try:
+        #         import pyaudio
+        #
+        #         pa = pyaudio.PyAudio()
+        #         output_stream = pa.open(
+        #             format=pyaudio.paFloat32,
+        #             channels=self.microphone.channels,
+        #             rate=self.microphone.sample_rate,
+        #             output=True,
+        #             frames_per_buffer=self.microphone.chunk_size,
+        #         )
+        #         self.logger.info(f"Output stream started: {self.microphone.channels} channels @ {self.microphone.sample_rate}Hz")
+        #     except Exception as e:
+        #         self.logger.error(f"Error initializing output stream: {e}")
 
         while self.is_running:
             try:
@@ -810,20 +827,20 @@ class AudioAnalyzer(BaseAnalyzer):
                 self.last_audio = audio_data.copy()
 
                 # 播放音频（仅在流模式下有效）
-                if output_stream is not None:
-                    try:
-                        output_stream.write(audio_data.tobytes())
-                    except Exception as e:
-                        self.logger.error(f"Error during audio playback: {e}")
+                # if output_stream is not None:
+                #     try:
+                #         output_stream.write(audio_data.tobytes())
+                #     except Exception as e:
+                #         self.logger.error(f"Error during audio playback: {e}")
 
             except Exception as e:
                 self.logger.error(f"Error generating audio: {str(e)}")
                 time.sleep(0.1)
 
         # 清理输出流资源
-        if output_stream is not None:
-            output_stream.stop_stream()
-            output_stream.close()
+        # if output_stream is not None:
+        #     output_stream.stop_stream()
+        #     output_stream.close()
 
     def flush_audio_buffer(self):
         """
@@ -870,6 +887,9 @@ class AudioAnalyzer(BaseAnalyzer):
             self.microphone.release()
             self.microphone = Microphone()
         super().stop()
+        self.stopped = True
+        if self.retry_thread:
+            self.retry_thread.join()
 
     def _analyze_loop(self):
         """
