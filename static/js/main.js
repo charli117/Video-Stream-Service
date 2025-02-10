@@ -687,7 +687,6 @@ async function updateStatus() {
             <p><i class="fas fa-microphone"></i> Audio: ${status.current_audio_name || 'None'}</p>
             <p><i class="fas fa-expand"></i> Resolution: ${status.camera_info.width || 0}x${status.camera_info.height || 0}</p>
             <p><i class="fas fa-tachometer-alt"></i> FPS: ${status.fps || 0}</p>
-            <p><i class="fas fa-analytics"></i> Analysis: ${status.analysis_enabled ? 'Enabled' : 'Disabled'}</p>
         `;
         
         if (!status.devices_ready) {

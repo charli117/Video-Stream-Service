@@ -271,8 +271,8 @@ class StreamCamera:
         self._silence_threshold = 0.02
         self.analysis_enabled = False
         self.reconnect_attempts = 0
-        self.max_reconnects = 3
-        self.reconnect_delay = 2
+        self._max_reconnects = 3
+        self._reconnect_delay = 2
         self.last_reconnect_time = 0
 
     def set_analysis_enabled(self, enabled: bool):
@@ -382,7 +382,9 @@ class StreamCamera:
                     "accessToken": InitialConfig.STREAM_CAMERA_ACCESS_TOKEN,
                     "deviceSerial": InitialConfig.STREAM_CAMERA_SERIAL,
                     "protocol": InitialConfig.STREAM_CAMERA_PROTOCOL,
-                    "supportH265": 0
+                    "quality": 1,
+                    "expireTime": cls.url_cache_duration,
+                    "supportH265": 1
                 }
 
                 response = requests.post(url, params=params, verify=False)
@@ -438,9 +440,9 @@ class StreamCamera:
                     self.video_container = av.open(rtmp_url, options={
                         'rtsp_transport': 'tcp',
                         'stimeout': '5000000',
-                        'reconnect': '1',
                         'reconnect_streamed': '1',
-                        'reconnect_delay_max': '2'
+                        'reconnect': str(self._max_reconnects),
+                        'reconnect_delay_max': str(self._reconnect_delay)
                     })
                     
                     # 初始化视频流(缺少这部分)
@@ -452,9 +454,9 @@ class StreamCamera:
                     self.audio_container = av.open(rtmp_url, options={
                         'rtsp_transport': 'tcp',
                         'stimeout': '5000000',
-                        'reconnect': '1',
                         'reconnect_streamed': '1',
-                        'reconnect_delay_max': '2'
+                        'reconnect': str(self._max_reconnects),
+                        'reconnect_delay_max': str(self._reconnect_delay)
                     })
 
                     # 初始化音频流
@@ -483,7 +485,7 @@ class StreamCamera:
 
         try:
             if self.video_stream is None or self.video_container is None:
-                if time.time() - self.last_reconnect_time > self.reconnect_delay:
+                if time.time() - self.last_reconnect_time > self._reconnect_delay:
                     self.reconnect()
                 return False, None
 
@@ -504,51 +506,57 @@ class StreamCamera:
         """改进的重连机制"""
         try:
             current_time = time.time()
-            if (current_time - self.last_reconnect_time) < self.reconnect_delay:
+            if (current_time - self.last_reconnect_time) < self._reconnect_delay:
                 return False
-                
+
             self.last_reconnect_time = current_time
             self.reconnect_attempts += 1
-            
-            if self.reconnect_attempts > self.max_reconnects:
+
+            if self.reconnect_attempts > self._max_reconnects:
                 self.logger.error("Max reconnection attempts reached")
                 return False
-                
-            self.cleanup()
-            
+
+            self.cleanup()             
+            # 等待一下确保资源彻底释放
+            time.sleep(1)
+
             rtmp_url = self.get_stream_url()
             if not rtmp_url:
                 return False
-                
+
             # 重新初始化视频和音频容器
             self.video_container = av.open(rtmp_url, options={
                 'rtsp_transport': 'tcp',
                 'stimeout': '5000000',
                 'reconnect_streamed': '1',
-                'reconnect_delay_max': '2'
+                'reconnect': str(self._max_reconnects),
+                'reconnect_delay_max': str(self._reconnect_delay)
             })
-            
+
             self.audio_container = av.open(rtmp_url, options={
                 'rtsp_transport': 'tcp',
                 'stimeout': '5000000',
                 'reconnect_streamed': '1',
-                'reconnect_delay_max': '2'
+                'reconnect': str(self._max_reconnects),
+                'reconnect_delay_max': str(self._reconnect_delay)
             })
-            
-            # 重新获取视频和音频流
+
+            # 重新获取视频流
             self.video_stream = self.video_container.streams.video[0]
             try:
+                # 尝试获取音频流并重新启动音频线程
                 self.audio_stream = self.audio_container.streams.audio[0]
                 self.audio_thread = threading.Thread(target=self.audio_processing_loop)
                 self.audio_thread.daemon = True
                 self.audio_thread.start()
             except Exception as e:
                 self.logger.error(f"Audio reconnection failed: {e}")
-                
+
             self.is_running = True
+            self.is_initialized = True
             self.logger.info("Stream reconnected successfully")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Reconnection failed: {e}")
             return False
@@ -558,10 +566,10 @@ class StreamCamera:
         self.is_running = False
         self.is_initialized = False  # 重置初始化状态
 
-        # 停止音频线程
+        # 停止音频线程，延长等待时间
         if hasattr(self, 'audio_thread') and self.audio_thread:
             try:
-                self.audio_thread.join(timeout=1.0)
+                self.audio_thread.join(timeout=5.0)  # 延长超时时间
             except Exception as e:
                 self.logger.error(f"Error stopping audio thread: {e}")
 
@@ -581,4 +589,26 @@ class StreamCamera:
         self.video_stream = None
         self.audio_stream = None
         self.reconnect_attempts = 0
+
+        # 等待0.5秒确保系统资源释放
+        time.sleep(0.5)
         cv2.destroyAllWindows()
+
+    def release(self):
+        self.logger.info("Releasing StreamCamera resources")
+        if hasattr(self, 'video_container') and self.video_container:
+            try:
+                self.video_container.close()
+            except Exception as e:
+                self.logger.error(f"Error closing video container: {e}")
+            finally:
+                self.video_container = None
+
+        if hasattr(self, 'audio_container') and self.audio_container:
+            try:
+                self.audio_container.close()
+            except Exception as e:
+                self.logger.error(f"Error closing audio container: {e}")
+            finally:
+                self.audio_container = None
+        self.is_running = False

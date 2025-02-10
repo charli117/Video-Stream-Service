@@ -498,7 +498,7 @@ class VideoAnalyzer(BaseAnalyzer):
             """
             gray = cv2.cvtColor(frame_image, cv2.COLOR_BGR2GRAY)
             laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
-            return laplacian_var < self._blur_threshold
+            return laplacian_var < self._blur_threshold, laplacian_var
 
         def check_frame_change(frame1, frame2):
             """
@@ -519,14 +519,23 @@ class VideoAnalyzer(BaseAnalyzer):
                 if frame1.shape != frame2.shape:
                     frame2 = cv2.resize(frame2, (frame1.shape[1], frame1.shape[0]))
 
-                if is_blurry(frame1) or is_blurry(frame2):
-                    return False
-
+                # 计算第一帧和第二帧的模糊度
                 gray1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
                 gray2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+                blur_flag1, blur1 = is_blurry(frame1)
+                blur_flag2, blur2 = is_blurry(frame2)
+                # 如果任一帧模糊直接返回
+                if blur_flag1 or blur_flag2:
+                    return False
 
-                score = ssim(gray1, gray2)
-                return score < self._similarity_threshold
+                # 计算SSIM相似度
+                ssim_score = ssim(gray1, gray2)
+                # 如果符合变化条件，打印详细信息
+                if ssim_score < self._similarity_threshold:
+                    self.logger.info(f"检测到显著的视频帧变化: 上一帧模糊度={blur1:.2f}, 当前帧模糊度={blur2:.2f}, 相似度={ssim_score:.2f}")
+                    return True
+                else:
+                    return False
 
             except Exception as err:
                 self.logger.error(f"比较帧时出错: {str(err)}")
@@ -571,7 +580,6 @@ class VideoAnalyzer(BaseAnalyzer):
                     if processed_frame is not None and len(processed_frame.shape) == 3:
                         if self.last_frame is not None:
                             if check_frame_change(self.last_frame, processed_frame):
-                                self.logger.info("检测到显著的视频帧变化")
                                 self._active_segment_frames.append(processed_frame.copy())
                                 if len(self._active_segment_frames) >= self._change_frame_threshole:
                                     concat_frame = self._process_change_frames(self._active_segment_frames)
@@ -882,7 +890,7 @@ class AudioAnalyzer(BaseAnalyzer):
 
                 # 如果相似度低于阈值且分析启用，则处理音频数据
                 if similarity < self.threshold and self.analysis_enabled:
-                    self.logger.info(f"检测到显著的音频流变化: similarity = {similarity}")
+                    self.logger.info(f"检测到显著的音频流变化: 相识度 = {similarity}")
                     self.active_segment.append(audio_data)
                     self.accumulated_samples += audio_data.shape[0]
 
