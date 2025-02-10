@@ -364,14 +364,13 @@ class VideoAnalyzer(BaseAnalyzer):
         self.last_frame = None
         self.fps = 0
         # 用于缓存检测到差异帧
-        self.active_segment_frames = []
-        self._blur_threshold = 100.0
-        self._similarity_threshold = 0.8
+        self._active_segment_frames = []
         self._frame_times = deque(maxlen=30)
         self._last_frame_time = time.time()
-        self.max_display_height = InitialConfig.MAX_DISPLAY_HEIGHT
-        self.scale_percent = InitialConfig.SCALE_PERCENT
-        self.change_frame_threshole = InitialConfig.CHANGE_FRAME_THRESHOLD
+        self._max_display_height = InitialConfig.MAX_DISPLAY_HEIGHT
+        self._blur_threshold = InitialConfig.BLUR_THRESHOLD
+        self._similarity_threshold = InitialConfig.SIMILARITY_THRESHOLD
+        self._change_frame_threshole = InitialConfig.CHANGE_FRAME_THRESHOLD
 
     def start(self, video_source=0):
         """启动视频分析器"""
@@ -573,9 +572,9 @@ class VideoAnalyzer(BaseAnalyzer):
                         if self.last_frame is not None:
                             if check_frame_change(self.last_frame, processed_frame):
                                 self.logger.info("检测到显著的视频帧变化")
-                                self.active_segment_frames.append(processed_frame.copy())
-                                if len(self.active_segment_frames) >= self.change_frame_threshole:
-                                    concat_frame = self._process_change_frames(self.active_segment_frames)
+                                self._active_segment_frames.append(processed_frame.copy())
+                                if len(self._active_segment_frames) >= self._change_frame_threshole:
+                                    concat_frame = self._process_change_frames(self._active_segment_frames)
                                     if concat_frame is not None:
                                         if self.change_queue.full():
                                             try:
@@ -583,13 +582,12 @@ class VideoAnalyzer(BaseAnalyzer):
                                             except Exception:
                                                 pass
                                         self.change_queue.put(concat_frame)
-                                        self.logger.info(f"已将 {len(self.active_segment_frames)} 帧拼接并入队")
-                                    self.active_segment_frames = []
+                                        self.logger.info(f"已将 {len(self._active_segment_frames)} 帧拼接并入队")
+                                    self._active_segment_frames = []
 
-                            self.last_frame = processed_frame.copy()
                         #         change_frames.append(processed_frame.copy())
                         #
-                        #         if len(change_frames) >= self.change_frame_threshole:
+                        #         if len(change_frames) >= self._change_frame_threshole:
                         #             concat_frame = process_change_frames(change_frames)
                         #             if concat_frame is not None:
                         #                 if self.change_queue.full():
@@ -600,7 +598,7 @@ class VideoAnalyzer(BaseAnalyzer):
                         #                 self.change_queue.put(concat_frame)
                         #             change_frames = []
                         #
-                        # self.last_frame = processed_frame.copy()
+                        self.last_frame = processed_frame.copy()
 
             except Exception as e:
                 self.logger.error(f"Error in analyze loop: {str(e)}")
@@ -637,8 +635,8 @@ class VideoAnalyzer(BaseAnalyzer):
         - 将拼接结果放入 change_queue（注意队列满时需要释放一个元素）
         - 清空当前帧缓存
         """
-        if self.active_segment_frames:
-            concat_frame = self._process_change_frames(self.active_segment_frames)
+        if self._active_segment_frames:
+            concat_frame = self._process_change_frames(self._active_segment_frames)
             if concat_frame is not None:
                 if self.change_queue.full():
                     try:
@@ -646,8 +644,8 @@ class VideoAnalyzer(BaseAnalyzer):
                     except Exception:
                         pass
                 self.change_queue.put(concat_frame)
-                self.logger.info(f"[flush_video_buffer] 保存了拼接视频帧，帧数: {len(self.active_segment_frames)}")
-            self.active_segment_frames = []
+                self.logger.info(f"[flush_video_buffer] 保存了拼接视频帧，帧数: {len(self._active_segment_frames)}")
+            self._active_segment_frames = []
 
     def _preprocess_frame(self, frame):
         """
@@ -697,10 +695,10 @@ class VideoAnalyzer(BaseAnalyzer):
 
         try:
             height, width = frame.shape[:2]
-            if height > self.max_display_height:
-                scale = self.max_display_height / height
+            if height > self._max_display_height:
+                scale = self._max_display_height / height
                 new_width = int(width * scale)
-                new_height = self.max_display_height
+                new_height = self._max_display_height
                 frame = cv2.resize(frame, (new_width, new_height))
             return frame
         except Exception as e:
@@ -884,7 +882,7 @@ class AudioAnalyzer(BaseAnalyzer):
 
                 # 如果相似度低于阈值且分析启用，则处理音频数据
                 if similarity < self.threshold and self.analysis_enabled:
-                    self.logger.info(f"符合条件的音频流检测: similarity = {similarity}")
+                    self.logger.info(f"检测到显著的音频流变化: similarity = {similarity}")
                     self.active_segment.append(audio_data)
                     self.accumulated_samples += audio_data.shape[0]
 
@@ -948,9 +946,9 @@ class AudioAnalyzer(BaseAnalyzer):
         # flush剩余的音频数据
         self.flush_audio_buffer()
         # 释放音频资源后，重新创建 microphone 实例以便后续初始化
-        if self.microphone:
-            self.microphone.release()
-            self.microphone = Microphone()
+        # if self.microphone:
+        #     self.microphone.release()
+        #     self.microphone = Microphone()
         super().stop()
         self.stopped = True
         if self.retry_thread:
