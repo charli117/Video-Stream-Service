@@ -361,18 +361,18 @@ class StreamCamera:
 
     @classmethod
     def get_stream_url(cls) -> Optional[str]:
-        """获取流媒体地址,带缓存机制"""
+        """获取流媒体地址, 带缓存机制和预留刷新时间"""
         current_time = time.time()
+        refresh_buffer = 60  # 预留60秒刷新时间
 
         with cls._url_lock:
-            # 检查是否有有效的缓存URL
-            if (cls._stream_url_cache and
-                    current_time < cls._stream_url_expire):
+            # 如果有缓存，并且当前时间小于 (expire_timestamp - buffer)，则返回缓存地址
+            if cls._stream_url_cache and current_time < (cls._stream_url_expire - refresh_buffer):
                 return cls._stream_url_cache
 
-            # 检查请求频率限制
+            # 如果离上次缓存后的等待时间不足，则等待
             if (current_time - cls._stream_url_expire) < 2:
-                if cls._stream_url_cache:  # 如果有旧缓存,先返回旧的
+                if cls._stream_url_cache:
                     return cls._stream_url_cache
                 time.sleep(2)  # 强制等待最小间隔
 
@@ -389,14 +389,12 @@ class StreamCamera:
                 response.raise_for_status()
                 data = response.json()
 
-                # 解析返回数据中的过期时间
                 expireTime = data.get('data', {}).get('expireTime')
                 if expireTime:
                     try:
-                        # 将过期时间转换为时间戳
                         expire_timestamp = time.mktime(time.strptime(expireTime, "%Y-%m-%d %H:%M:%S"))
-                    except:
-                        # 如果转换失败，使用默认缓存时间
+                    except Exception:
+                        cls._stream_url_cache = None
                         expire_timestamp = current_time + cls.url_cache_duration
                 else:
                     expire_timestamp = current_time + cls.url_cache_duration
@@ -409,7 +407,7 @@ class StreamCamera:
 
             except Exception as e:
                 logging.error(f"Failed to get stream URL: {e}")
-                if cls._stream_url_cache:  # 如果请求失败但有缓存,返回缓存的URL
+                if cls._stream_url_cache:
                     return cls._stream_url_cache
                 raise
 

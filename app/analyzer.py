@@ -359,11 +359,13 @@ class VideoAnalyzer(BaseAnalyzer):
     def __init__(self):
         super().__init__()
         self.logger = logging.getLogger('VideoAnalyzer')
-        self.last_frame = None
-        self.fps = 0
         self.camera = Camera()
         self.video_source = None
-        self._blur_threshold = 50.0
+        self.last_frame = None
+        self.fps = 0
+        # 用于缓存检测到差异帧
+        self.active_segment_frames = []
+        self._blur_threshold = 100.0
         self._similarity_threshold = 0.8
         self._frame_times = deque(maxlen=30)
         self._last_frame_time = time.time()
@@ -403,6 +405,10 @@ class VideoAnalyzer(BaseAnalyzer):
         try:
             self.is_running = False
             self.analysis_enabled = False  # 确保分析状态被重置
+
+            # 在停止前，先刷新剩余的缓存帧
+            self._flush_video_buffer()
+
             self.camera.release()
 
             # 等待所有线程结束
@@ -527,62 +533,121 @@ class VideoAnalyzer(BaseAnalyzer):
                 self.logger.error(f"比较帧时出错: {str(err)}")
                 return False
 
-        def process_change_frames(frames):
-            """
-            处理变化帧,将变化帧拼接为一个大帧
-            Args:
-                frames: 帧列表
-            Returns:
-                numpy.ndarray: 处理后的帧
-            """
-            try:
-                if not frames:
-                    return None
+        # def process_change_frames(frames):
+        #     """
+        #     处理变化帧,将变化帧拼接为一个大帧
+        #     Args:
+        #         frames: 帧列表
+        #     Returns:
+        #         numpy.ndarray: 处理后的帧
+        #     """
+        #     try:
+        #         if not frames:
+        #             return None
+        #
+        #         min_height = min(new_frame.shape[0] for new_frame in frames)
+        #         resized_frames = []
+        #         for new_frame in frames:
+        #             scale = min_height / new_frame.shape[0]
+        #             new_width = int(new_frame.shape[1] * scale)
+        #             resized = cv2.resize(new_frame, (new_width, min_height))
+        #             resized_frames.append(resized)
+        #
+        #         return cv2.hconcat(resized_frames)
+        #
+        #     except Exception as err:
+        #         self.logger.error(f"Error processing change frames: {str(err)}")
+        #         return None
 
-                min_height = min(new_frame.shape[0] for new_frame in frames)
-                resized_frames = []
-                for new_frame in frames:
-                    scale = min_height / new_frame.shape[0]
-                    new_width = int(new_frame.shape[1] * scale)
-                    resized = cv2.resize(new_frame, (new_width, min_height))
-                    resized_frames.append(resized)
-
-                return cv2.hconcat(resized_frames)
-
-            except Exception as err:
-                self.logger.error(f"Error processing change frames: {str(err)}")
-                return None
-
-        change_frames = []
+        # change_frames = []
         while self.is_running:
             try:
                 if not self.frame_queue.empty() and self.analysis_enabled:
                     frame = self.frame_queue.get()
                     processed_frame = self._preprocess_frame(frame)
 
+                    if processed_frame is None:
+                        continue
+
                     if processed_frame is not None and len(processed_frame.shape) == 3:
                         if self.last_frame is not None:
                             if check_frame_change(self.last_frame, processed_frame):
-                                self.logger.info("Significant frame change detected")
-                                change_frames.append(processed_frame.copy())
-
-                                if len(change_frames) >= self.change_frame_threshole:
-                                    concat_frame = process_change_frames(change_frames)
+                                self.logger.info("检测到显著的视频帧变化")
+                                self.active_segment_frames.append(processed_frame.copy())
+                                if len(self.active_segment_frames) >= self.change_frame_threshole:
+                                    concat_frame = self._process_change_frames(self.active_segment_frames)
                                     if concat_frame is not None:
                                         if self.change_queue.full():
                                             try:
                                                 self.change_queue.get_nowait()
-                                            except:
+                                            except Exception:
                                                 pass
                                         self.change_queue.put(concat_frame)
-                                    change_frames = []
+                                        self.logger.info(f"已将 {len(self.active_segment_frames)} 帧拼接并入队")
+                                    self.active_segment_frames = []
 
-                        self.last_frame = processed_frame.copy()
+                            self.last_frame = processed_frame.copy()
+                        #         change_frames.append(processed_frame.copy())
+                        #
+                        #         if len(change_frames) >= self.change_frame_threshole:
+                        #             concat_frame = process_change_frames(change_frames)
+                        #             if concat_frame is not None:
+                        #                 if self.change_queue.full():
+                        #                     try:
+                        #                         self.change_queue.get_nowait()
+                        #                     except:
+                        #                         pass
+                        #                 self.change_queue.put(concat_frame)
+                        #             change_frames = []
+                        #
+                        # self.last_frame = processed_frame.copy()
 
             except Exception as e:
                 self.logger.error(f"Error in analyze loop: {str(e)}")
 
             time.sleep(0.01)
+
+    def _process_change_frames(self, frames):
+        """
+        将缓存的变化帧拼接为一个大帧。
+        """
+        try:
+            if not frames:
+                return None
+
+            min_height = min(frame.shape[0] for frame in frames)
+            resized_frames = []
+            for frame in frames:
+                scale = min_height / frame.shape[0]
+                new_width = int(frame.shape[1] * scale)
+                resized = cv2.resize(frame, (new_width, min_height))
+                resized_frames.append(resized)
+
+            return cv2.hconcat(resized_frames)
+
+        except Exception as err:
+            self.logger.error(f"Error processing change frames: {str(err)}")
+            return None
+
+    def _flush_video_buffer(self):
+        """
+        刷新当前缓存的视频变化帧，
+        与音频类似：
+        - 拼接当前缓存的帧
+        - 将拼接结果放入 change_queue（注意队列满时需要释放一个元素）
+        - 清空当前帧缓存
+        """
+        if self.active_segment_frames:
+            concat_frame = self._process_change_frames(self.active_segment_frames)
+            if concat_frame is not None:
+                if self.change_queue.full():
+                    try:
+                        self.change_queue.get_nowait()
+                    except Exception:
+                        pass
+                self.change_queue.put(concat_frame)
+                self.logger.info(f"[flush_video_buffer] 保存了拼接视频帧，帧数: {len(self.active_segment_frames)}")
+            self.active_segment_frames = []
 
     def _preprocess_frame(self, frame):
         """
