@@ -117,6 +117,7 @@ def get_status():
     """获取当前状态"""
     try:
         # 检查设备就绪状态
+        video_initialized = False
         devices_ready = True
         current_camera_index = str(video_analyzer.video_source)
         current_audio_index = str(audio_analyzer.current_device)
@@ -284,28 +285,26 @@ def cleanup():
 def get_history_files():
     try:
         # 获取输出目录路径
-        output_dir = app.config['OUTPUT_DIR']
+        output_dir = InitialConfig.OUTPUT_DIR
         
         # 获取图像文件
         image_files = glob.glob(os.path.join(output_dir, 'frame_*.jpg'))
         frame_changes = []
         for file in image_files:
-            # 从文件名中提取时间戳
-            timestamp = float(os.path.basename(file).replace('frame_', '').replace('.jpg', ''))
+            timestamp = os.path.getmtime(file)
             frame_changes.append({
                 'time': timestamp,
-                'image_url': f'/output/frame_{timestamp}.jpg'
+                'image_url': f'/output/{os.path.basename(file)}'
             })
         
         # 获取音频文件
         audio_files = glob.glob(os.path.join(output_dir, 'audio_*.wav'))
         audio_changes = []
         for file in audio_files:
-            # 从文件名中提取时间戳
-            timestamp = float(os.path.basename(file).replace('audio_', '').replace('.wav', ''))
+            timestamp = os.path.getmtime(file)
             audio_changes.append({
                 'time': timestamp,
-                'audio_url': f'/output/audio_{timestamp}.wav'
+                'audio_url': f'/output/{os.path.basename(file)}'
             })
         
         # 按时间戳排序

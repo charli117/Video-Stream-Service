@@ -806,8 +806,7 @@ async function updateStatus() {
         if (frameLogEntries) {
             frameLogEntries.innerHTML = frameChangesHistory.length > 0 ?
                 frameChangesHistory.map(change => {
-                    const date = new Date(change.time * 1000);
-                    const timeString = date.toLocaleString('zh-CN');
+                    const timeString = change.time ? new Date(change.time * 1000).toLocaleString('zh-CN') : 'N/A';
                     return `
                         <div class="log-entry">
                             <a href="javascript:void(0)" onclick="showImageViewer('${change.image_url}')" class="change-time">
@@ -824,8 +823,7 @@ async function updateStatus() {
         if (audioLogEntries) {
             audioLogEntries.innerHTML = audioChangesHistory.length > 0 ?
                 audioChangesHistory.map(change => {
-                    const date = new Date(change.time * 1000);
-                    const timeString = date.toLocaleString('zh-CN');
+                    const timeString = change.time ? new Date(change.time * 1000).toLocaleString('zh-CN') : 'N/A';
                     return `
                         <div class="log-entry">
                             <a href="javascript:void(0)" onclick="playAudioSegment('${change.audio_url}', this)" class="change-time">
