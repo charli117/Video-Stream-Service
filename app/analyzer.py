@@ -541,33 +541,6 @@ class VideoAnalyzer(BaseAnalyzer):
                 self.logger.error(f"比较帧时出错: {str(err)}")
                 return False
 
-        # def process_change_frames(frames):
-        #     """
-        #     处理变化帧,将变化帧拼接为一个大帧
-        #     Args:
-        #         frames: 帧列表
-        #     Returns:
-        #         numpy.ndarray: 处理后的帧
-        #     """
-        #     try:
-        #         if not frames:
-        #             return None
-        #
-        #         min_height = min(new_frame.shape[0] for new_frame in frames)
-        #         resized_frames = []
-        #         for new_frame in frames:
-        #             scale = min_height / new_frame.shape[0]
-        #             new_width = int(new_frame.shape[1] * scale)
-        #             resized = cv2.resize(new_frame, (new_width, min_height))
-        #             resized_frames.append(resized)
-        #
-        #         return cv2.hconcat(resized_frames)
-        #
-        #     except Exception as err:
-        #         self.logger.error(f"Error processing change frames: {str(err)}")
-        #         return None
-
-        # change_frames = []
         while self.is_running:
             try:
                 if not self.frame_queue.empty() and self.analysis_enabled:
@@ -593,19 +566,6 @@ class VideoAnalyzer(BaseAnalyzer):
                                         self.logger.info(f"已将 {len(self._active_segment_frames)} 帧拼接并入队")
                                     self._active_segment_frames = []
 
-                        #         change_frames.append(processed_frame.copy())
-                        #
-                        #         if len(change_frames) >= self._change_frame_threshole:
-                        #             concat_frame = process_change_frames(change_frames)
-                        #             if concat_frame is not None:
-                        #                 if self.change_queue.full():
-                        #                     try:
-                        #                         self.change_queue.get_nowait()
-                        #                     except:
-                        #                         pass
-                        #                 self.change_queue.put(concat_frame)
-                        #             change_frames = []
-                        #
                         self.last_frame = processed_frame.copy()
 
             except Exception as e:

@@ -6,7 +6,7 @@ class InitialConfig:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev'
 
     # 流媒体摄像头配置，支持 stream、local
-    CAMERA_TYPE = 'stream'
+    CAMERA_TYPE = 'local'
     STREAM_CAMERA_ACCESS_TOKEN = "at.bd1d0zsrdwjf0md3bpq23jky4v51x9xe-8s3fg03m8t-1kmlia0-mw6h93hot"
     STREAM_CAMERA_SERIAL = "G92729163"
     STREAM_CAMERA_PROTOCOL = 3
@@ -22,7 +22,7 @@ class InitialConfig:
     DEFAULT_FPS = 30
     MAX_DISPLAY_HEIGHT = 720
     MAX_SAVED_IMAGES = 1000
-    CHANGE_FRAME_THRESHOLD = 6
+    CHANGE_FRAME_THRESHOLD = 12
     BLUR_THRESHOLD = 150.0
     SIMILARITY_THRESHOLD = 0.90
 
